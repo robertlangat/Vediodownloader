@@ -48,6 +48,10 @@ test('TikTok: public post -> not_downloadable, missing post -> removed', async (
   const errBody = fakeFetch([['https://www.tiktok.com/oembed', () => json(200, { code: 400, message: 'Something went wrong' })]]);
   const r3 = await resolveTikTok(parseLink('https://www.tiktok.com/@a/video/1000000000000000001'), { fetchImpl: errBody });
   assert.equal(r3.reason, 'removed');
+
+  const generic = fakeFetch([['https://www.tiktok.com/oembed', () => json(200, { version: '1.0', type: 'video', html: '<iframe src="https://www.tiktok.com/player/v1/1000000000000000001">' })]]);
+  const r4 = await resolveTikTok(parseLink('https://www.tiktok.com/@a/video/1000000000000000001'), { fetchImpl: generic });
+  assert.equal(r4.reason, 'removed');
 });
 
 const igSession = { instagram: { accessToken: 'IGTOKEN', username: 'me' } };

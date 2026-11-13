@@ -11,7 +11,9 @@ for (const [label, url] of cases) {
   try {
     const raw = await fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`);
     const text = await raw.text();
-    console.log(`${label}: oEmbed HTTP ${raw.status} body=${text.slice(0, 160).replace(/\s+/g, ' ')}`);
+    let keys = '';
+    try { const j = JSON.parse(text); keys = Object.keys(j).join(',') + ` author_name=${j.author_name || '-'}`; } catch { keys = text.slice(0, 80); }
+    console.log(`${label}: oEmbed HTTP ${raw.status} keys=${keys}`);
     const r = await resolveTikTok(parseLink(url), { fetchImpl: fetch });
     console.log(`${label}: status=${r.status} reason=${r.reason || '-'}`);
   } catch (e) {

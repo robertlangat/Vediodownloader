@@ -53,7 +53,8 @@ export async function resolveTikTok(link, { fetchImpl }) {
   // oEmbed can answer 200 with an error body for missing/private posts, so check the payload too.
   const body = await res.json().catch(() => null);
   const failed = !body || (body.code !== undefined && body.code !== 0) || (body.status_code !== undefined && body.status_code !== 0);
-  if (failed || !(body.html || body.author_name || body.title)) {
+  // A generic player iframe is returned even for unknown ids; real posts carry author/title metadata.
+  if (failed || !(body.author_name || body.author_unique_id || body.title)) {
     return unavailable('removed', 'This TikTok post is private, removed or the link is broken.', link.url);
   }
   return unavailable(
