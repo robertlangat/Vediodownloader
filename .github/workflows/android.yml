@@ -76,6 +76,7 @@ jobs:
           grep -E "\| PASS \|" test-report.md | sed -E 's/^\| `([^`]+)`.*/\1/' | tr '\n' ' ' | sed 's/^/::notice title=Passed tests::/'; echo
           grep -E "FAIL" test-report.md | head -10 | while IFS= read -r l; do echo "::error title=Test failure::$l"; done
           echo "::notice title=Result::$(grep 'Overall' test-report.md | tr -d '*')"
+          grep -E "SVD-EXTRACT|SVD-TEST" svd-test-logcat.txt 2>/dev/null | head -14 | cut -c1-240 | while IFS= read -r l; do echo "::notice title=Log::$l"; done
           grep "SVD-LIVE" svd-test-logcat.txt 2>/dev/null | sed -E 's/.*SVD-LIVE: //' | while IFS= read -r l; do echo "::notice title=Live check (real site)::$l"; done
           if [ -f emulator-failed ]; then grep -E "FAILED|Exception|Error:" emulator-log.txt | head -8 | while IFS= read -r l; do echo "::error title=Emulator::$l"; done; fi
           (cd screenshots 2>/dev/null && find . -name '*.png' | head -20 | xargs -r zip -j ../test-screenshots.zip) || true

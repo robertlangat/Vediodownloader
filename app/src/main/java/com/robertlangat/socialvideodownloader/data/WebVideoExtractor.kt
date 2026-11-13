@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import org.json.JSONTokener
 import java.io.IOException
@@ -92,6 +93,7 @@ class WebVideoExtractor(private val context: Context) {
         var mainFrameError: String? = null
         var mainFrameHttpStatus = 0
 
+        Log.d(TAG, "extract start ${link.platform} target=$target fake=${fakePage != null}")
         val webView = createWebView(ua, media, onError = { mainFrameError = it }, onHttpError = { mainFrameHttpStatus = it })
         try {
             if (fakePage != null) {
@@ -109,7 +111,7 @@ class WebVideoExtractor(private val context: Context) {
                 if (mainFrameHttpStatus == 404 || mainFrameHttpStatus == 410) {
                     return@withContext Extraction.Unavailable("This post was removed or the link is broken.")
                 }
-                val snap = snapshot(webView)
+                val snap = withTimeoutOrNull(5_000) { snapshot(webView) }
                 Log.d(TAG, "poll url=${snap?.url} html=${snap?.html?.length} video=${snap?.videoSrc} media=${media.size}")
                 if (snap != null) {
                     last = snap
