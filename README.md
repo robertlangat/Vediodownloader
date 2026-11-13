@@ -3,7 +3,7 @@
 Native Android app (Kotlin · Jetpack Compose · Material 3) for saving **videos you own or have permission to save** from TikTok, Instagram and Facebook into your phone's Gallery.
 
 - **Minimum Android version:** Android 10 (API 29). Target SDK 35.
-- **Download a test build:** see [Releases](https://github.com/robertlangat/Vediodownloader/releases) → `v0.1.0-test` → `SocialVideoDownloader-v0.1.0-test.apk`.
+- **Test build:** `SocialVideoDownloader-v0.1.0-test.apk`, from [Releases](https://github.com/robertlangat/Vediodownloader/releases) once `v0.1.0-test` is published (see *Build* below), or from the latest CI run's artifacts.
 
 ## What the app does
 
@@ -77,7 +77,15 @@ cd backend && npm test                     # backend tests (Node 18+)
 
 Requirements: JDK 17 and the Android SDK (API 35). Open the folder in Android Studio, or use the Gradle wrapper (Gradle 8.14.3, AGP 8.10.1, Kotlin 2.1.21).
 
-CI (`.github/workflows/android.yml`) runs all of the above on every push, including the emulator tests on API 30. Pushing a `v*` tag publishes a GitHub pre-release with the APK and `test-report.md`.
+CI (`.github/workflows/android.yml`) runs all of the above on every push, including the emulator tests on API 30. The APK, `test-report.md` and UI screenshots are saved as the run's **apk-and-reports** artifact.
+
+To publish the test build as a GitHub pre-release, push the tag from your computer:
+
+```bash
+git tag v0.1.0-test && git push origin v0.1.0-test
+```
+
+You can also create the release `v0.1.0-test` on GitHub's Releases page and tick **Set as a pre-release**. Either way, the workflow builds `SocialVideoDownloader-v0.1.0-test.apk` and attaches it, together with the test report.
 
 ## Testing notes
 

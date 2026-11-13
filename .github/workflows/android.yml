@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -108,17 +110,6 @@ jobs:
           FILES="dist/${APK_NAME} test-report.md"
           [ -f test-screenshots.zip ] && FILES="$FILES test-screenshots.zip"
           gh release upload "$TAG" $FILES --clobber
-
-      - name: Publish CI logs for non-tag builds (draft release "ci-logs")
-        if: always() && env.IS_TAG != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release view ci-logs >/dev/null 2>&1 || gh release create ci-logs --draft --title "CI logs (draft, safe to delete)" --notes "Latest CI build logs and test report for ${GITHUB_SHA}."
-          gh release edit ci-logs --notes "Latest CI build logs and test report for ${GITHUB_SHA}."
-          FILES=""
-          for f in test-report.md build-log-tail.txt emulator-log-tail.txt test-screenshots.zip dist/*.apk; do [ -f "$f" ] && FILES="$FILES $f"; done
-          [ -n "$FILES" ] && gh release upload ci-logs $FILES --clobber || true
 
       - name: Fail if emulator tests failed
         if: always()
