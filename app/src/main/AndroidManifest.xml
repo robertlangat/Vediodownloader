@@ -40,13 +40,6 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
 
-            <!-- OAuth return from the backend: socialvideodl://auth?session=...&platform=... -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="socialvideodl" android:host="auth" />
-            </intent-filter>
         </activity>
     </application>
 

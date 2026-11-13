@@ -3,7 +3,7 @@
 Native Android app (Kotlin · Jetpack Compose · Material 3) for saving **videos you own or have permission to save** from TikTok, Instagram and Facebook into your phone's Gallery.
 
 - **Minimum Android version:** Android 10 (API 29). Target SDK 35.
-- **Test build:** `SocialVideoDownloader-v0.1.0-test.apk`, from [Releases](https://github.com/robertlangat/Vediodownloader/releases) once `v0.1.0-test` is published (see *Build* below), or from the latest CI run's artifacts.
+- **Latest tested APK:** published to the [`apk-builds` branch](https://github.com/robertlangat/Vediodownloader/tree/apk-builds) after every passing CI run on `main`.
 
 ## What the app does
 
@@ -27,9 +27,8 @@ While it works, the app shows **Checking link…**, then download progress with 
 - **Storage:**
   - the storage permission status, with an **Allow** button;
   - the **Save folder** (default `Movies/SocialVideoDownloader`, which appears in Gallery), with **Choose folder** to pick any other folder on the phone and **Use default** to switch back.
-- **Connected accounts:** Connect Instagram or Facebook.
+- **Sign in (optional):** Sign in to Instagram, Facebook or TikTok inside the app, plus **Sign out of all**.
 - **Ads & privacy:** a **Privacy options** button, shown where consent rules apply.
-- **Advanced** (collapsed): the download service address.
 
 ## Ads (AdMob)
 
@@ -44,60 +43,36 @@ While it works, the app shows **Checking link…**, then download progress with 
 - **Live ads on your own phone:** don't tap your own live ads. AdMob can suspend accounts for invalid clicks.
 - **New apps:** live ads may not fill until the app is set up and reviewed in AdMob.
 
-## How downloads are authorised
+## How downloads work
 
-The app never scrapes platforms. A small backend (`backend/`) holds the provider secrets and uses only official endpoints:
+Everything happens on the phone; there is no server and nothing to configure.
 
-| Platform | Integration | Links it can resolve | What gets downloaded |
-|---|---|---|---|
-| **Instagram** | Instagram API with Instagram Login (`graph.instagram.com`, scope `instagram_business_basic`) | `instagram.com/reel/…`, `/p/…`, `/reels/…`, `/tv/…`, `/{user}/reel/…`, and `/share/…` short links (expanded) | Videos and reels posted by **your own Instagram Professional (Business or Creator) account** that you connect. The app matches the shortcode against your media and downloads the `media_url` Instagram provides. Other people's posts return "not in your account". |
-| **Facebook** | Facebook Login + Graph API (`graph.facebook.com`, `pages_show_list`, `pages_read_engagement`, `pages_read_user_content`) | `facebook.com/watch?v=…`, `/{page}/videos/…`, `/reel/{id}`, `/video.php?v=…`, and `fb.watch/…` / `/share/v/…` / `/share/r/…` short links (expanded) | Videos on **Facebook Pages you manage**. The app downloads the video `source` the Graph API provides. Personal-profile videos and other people's videos are not available through the API. |
-| **TikTok** | Official public oEmbed (`tiktok.com/oembed`) | `tiktok.com/@user/video/…`, `vm.tiktok.com/…`, `vt.tiktok.com/…`, `tiktok.com/t/…` | **Nothing.** The app explains this right away (no service needed) and offers **Open in TikTok**. TikTok's official APIs (Display API, Content Posting API) do not provide video files. The app confirms whether the post exists, then asks you to open it in TikTok and use **Save video** (shown when the creator allows downloads). |
+1. The app opens the post in a hidden, built-in browser (Android WebView) using the phone's own internet connection and any sign-ins you have made in the app.
+2. It reads the video file address that the page itself contains:
+   - **TikTok:** `playAddr` in the page data. If that's missing, the address the page's player loads.
+   - **Instagram:** `video_versions` / `video_url`.
+   - **Facebook:** `browser_native_hd_url` / `browser_native_sd_url` / `playable_url`.
+3. It downloads that file with the same browser cookies and saves it to your save folder.
 
-## Backend setup (required for Instagram and Facebook)
+| Platform | Links | Notes |
+|---|---|---|
+| TikTok | `tiktok.com/@user/video/…`, `vm.tiktok.com/…`, `vt.tiktok.com/…`, `tiktok.com/t/…` | Public videos usually work without signing in. |
+| Instagram | `/reel/…`, `/p/…`, `/reels/…`, `/tv/…`, `/share/…` | Instagram usually requires sign-in. The app shows **Sign in to Instagram** when needed. Private accounts work only if you follow them. |
+| Facebook | `watch?v=…`, `/videos/…`, `/reel/…`, `fb.watch/…`, `/share/v/…`, `/share/r/…` | Public videos often work. Sign in for videos only visible to logged-in users. |
 
-The secrets stay on the backend and never ship in the APK.
+**Limitations:**
 
-1. **Create a Meta app** at <https://developers.facebook.com/apps>. Choose type **Business**.
-   - Add **Instagram → API setup with Instagram login**. Copy the *Instagram app ID* and *Instagram app secret*. Add your Instagram Professional account as an Instagram tester and accept the invite in Instagram settings.
-   - Add **Facebook Login for Business**. Copy the app ID and app secret from *App settings → Basic*.
-   - Set the redirect URIs to `https://YOUR-BACKEND/auth/instagram/callback` and `https://YOUR-BACKEND/auth/facebook/callback`.
-   - While the app is in *Development* mode, only app roles and testers can log in. That is enough for testing with your own accounts.
-2. **Deploy `backend/`**. It needs Node.js 18+ and has no dependencies. Pick one:
-   - **Render:** use *New → Blueprint* and pick this repository (`render.yaml`). Then fill in the environment variables.
-   - **Docker:** run `docker build -t svd-backend backend && docker run -p 8080:8080 --env-file backend/.env svd-backend`.
-   - **Locally, for development:** run `cd backend && cp .env.example .env`, fill it in, then `node --env-file=.env src/server.js`. Expose it over HTTPS (for example with a tunnel), because the app only talks to HTTPS backends except for `localhost`, `127.0.0.1` and `10.0.2.2`.
-
-   | Variable | Value |
-   |---|---|
-   | `PUBLIC_BASE_URL` | Public HTTPS URL of the backend |
-   | `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET` | From step 1 |
-   | `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET` | From step 1 |
-   | `SESSION_FILE` | Path for stored tokens (default `./data/sessions.json`). Use a persistent disk. |
-
-   Check that it's running: `GET /health` should return `{"ok":true,...}`.
-3. **Point the app at the backend.** Either:
-   - in the app, tap ⚙ → **Advanced** → **Download service address** → Save, then **Connect Instagram** or **Connect Facebook**; or
-   - bake the URL into the APK: run `./gradlew assembleDebug -PbackendUrl=https://YOUR-BACKEND`, or set the repository variable `BACKEND_URL` so CI builds include it.
-
-### Backend API
-
-```
-POST /api/resolve        Authorization: Bearer <session>     {"url": "...", "platform": "instagram"}
-→ {"status":"ready","downloadUrl":"...","fileName":"...","mimeType":"video/mp4"}
-→ {"status":"unavailable","reason":"private|removed|not_owned|not_downloadable|not_video|invalid|not_configured","message":"...","originalUrl":"..."}
-→ {"status":"auth_required","platform":"instagram","authUrl":".../auth/instagram/start","message":"..."}
-→ {"status":"retry","message":"..."}          (temporary; the app shows Retry)
-GET  /auth/{instagram|facebook}/start?session=…   → OAuth → socialvideodl://auth?session=…&platform=…
-```
+- **Unofficial method:** this is not an official API, and it goes against these platforms' terms of service.
+- **It can break:** the platforms change their pages often. When they do, the page parser (`data/VideoUrlParser.kt`) needs updating.
+- **Store policies:** Google Play and AdMob policies prohibit apps that download from these platforms against their terms. Distributing this app with live ads risks your AdMob account.
+- **Rights:** only download videos you own or have permission to save.
 
 ## Build
 
 ```bash
 ./gradlew assembleDebug                    # app/build/outputs/apk/debug/app-debug.apk
 ./gradlew testDebugUnitTest                # JVM unit tests (link parsing, API parsing)
-./gradlew connectedDebugAndroidTest        # emulator/device tests (mock backend + CDN)
-cd backend && npm test                     # backend tests (Node 18+)
+./gradlew connectedDebugAndroidTest        # emulator/device tests (local post pages + file server)
 ```
 
 Requirements: JDK 17 and the Android SDK (API 35). Open the folder in Android Studio, or use the Gradle wrapper (Gradle 8.14.3, AGP 8.10.1, Kotlin 2.1.21).
@@ -114,28 +89,29 @@ You can also create the release `v0.1.0-test` on GitHub's Releases page and tick
 
 ## Testing notes
 
-- The emulator tests run the real app against a local mock backend and CDN that return the same JSON as the real backend. They cover:
-  - paste-to-download for each platform;
-  - the Paste shortcut auto-selecting the platform;
+- **Emulator tests:** the app runs against local copies of TikTok, Instagram and Facebook post pages that contain the same data fields the real pages use. They cover:
+  - download from each platform;
+  - an Instagram sign-in wall;
+  - a removed post;
   - an invalid link;
-  - an unavailable post;
   - an interrupted download followed by Retry;
-  - Cancel.
-- Each saved video is checked in MediaStore: not pending, has a video track, correct duration, a decodable frame, and MediaPlayer playback.
-- Real Instagram and Facebook downloads need the backend set up with your Meta app and your own account or Page.
-- This test build downloads in the foreground. Keep the app open until the download finishes.
-- The debug APK is signed with the committed `app/debug.keystore`, so newer test builds install over older ones.
+  - Cancel;
+  - the Settings screen.
+- **Saved-video checks:** each saved video is checked in MediaStore, decoded, and played with MediaPlayer.
+- **Live checks:** `LiveExtractionTest` also tries real public posts from the CI emulator and reports the results without failing the build. CI runs from a data-centre network, which these sites often block or treat differently from a phone, so real results on your phone can be better.
+- **Foreground only:** downloads run while the app is open.
+- **Updates install in place:** the debug APK is signed with the committed `app/debug.keystore`, so newer test builds install over older ones.
 
 ## Project layout
 
 ```
 app/src/main/java/com/robertlangat/socialvideodownloader/
   data/LinkParser.kt        platform + link recognition
-  data/ResolverClient.kt    backend API client
+  data/WebVideoExtractor.kt hidden-WebView page loading + sign-in cookies
+  data/VideoUrlParser.kt    finds the video address in TikTok / Instagram / Facebook pages
   data/VideoDownloader.kt   streaming download → MediaStore (Gallery)
   ui/DownloadViewModel.kt   state machine: Checking → Downloading → Saved / Retry / Unavailable
   ui/HomeScreen.kt          Compose UI
-backend/                    Node.js resolver (Instagram, Facebook, TikTok)
 ```
 
 Respect creators' rights and each platform's terms. Only download content you own or have permission to save.

@@ -2,11 +2,7 @@ package com.robertlangat.socialvideodownloader
 
 import com.robertlangat.socialvideodownloader.data.LinkParser
 import com.robertlangat.socialvideodownloader.data.Platform
-import com.robertlangat.socialvideodownloader.data.ParsedLink
-import com.robertlangat.socialvideodownloader.data.ResolveResult
-import com.robertlangat.socialvideodownloader.data.ResolverClient
 import com.robertlangat.socialvideodownloader.data.VideoDownloader
-import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -94,37 +90,6 @@ class LinkParserTest {
     @Test
     fun httpIsUpgraded() {
         assertTrue(LinkParser.parse("http://www.instagram.com/reel/C1a2B3c4D5e/")!!.url.startsWith("https://"))
-    }
-
-    private val link = ParsedLink(Platform.INSTAGRAM, "https://www.instagram.com/reel/C1a2B3c4D5e/")
-
-    @Test
-    fun parsesReadyResponse() {
-        val r = ResolverClient.parse(
-            JSONObject("""{"status":"ready","downloadUrl":"https://cdn.example/v.mp4","fileName":"my clip.mp4","mimeType":"video/mp4"}"""),
-            link,
-        )
-        assertTrue(r is ResolveResult.Ready)
-        assertEquals("https://cdn.example/v.mp4", (r as ResolveResult.Ready).downloadUrl)
-    }
-
-    @Test
-    fun parsesUnavailableResponse() {
-        val r = ResolverClient.parse(JSONObject("""{"status":"unavailable","reason":"private"}"""), link)
-        r as ResolveResult.Unavailable
-        assertEquals("private", r.reason)
-        assertEquals(link.url, r.originalUrl)
-        assertTrue(r.message.contains("private"))
-    }
-
-    @Test
-    fun parsesAuthRequiredResponse() {
-        val r = ResolverClient.parse(
-            JSONObject("""{"status":"auth_required","platform":"instagram","authUrl":"https://b/auth/instagram/start"}"""),
-            link,
-        )
-        r as ResolveResult.AuthRequired
-        assertEquals(Platform.INSTAGRAM, r.platform)
     }
 
     @Test

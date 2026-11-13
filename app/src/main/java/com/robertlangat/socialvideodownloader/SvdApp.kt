@@ -2,7 +2,7 @@ package com.robertlangat.socialvideodownloader
 
 import android.app.Application
 import android.content.Context
-import com.robertlangat.socialvideodownloader.data.ResolverClient
+import com.robertlangat.socialvideodownloader.data.WebVideoExtractor
 import com.robertlangat.socialvideodownloader.data.Settings
 import com.robertlangat.socialvideodownloader.data.VideoDownloader
 import okhttp3.OkHttpClient
@@ -23,6 +23,6 @@ class AppContainer(context: Context) {
         .retryOnConnectionFailure(true)
         .build()
 
-    val resolver = ResolverClient(http, settings)
+    val extractor = WebVideoExtractor(context.applicationContext)
     val downloader = VideoDownloader(context.applicationContext, http)
 }

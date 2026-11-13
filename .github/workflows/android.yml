@@ -22,9 +22,6 @@ jobs:
     env:
       IS_TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
       APK_NAME: SocialVideoDownloader-${{ github.ref_name }}.apk
-      # Set the repository variable BACKEND_URL (Settings > Secrets and variables > Actions > Variables)
-      # to bake your deployed backend into the APK.
-      BACKEND_URL: ${{ vars.BACKEND_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -35,25 +32,11 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      - name: Backend tests
-        run: |
-          cd backend
-          node --test test/*.test.js 2>&1 | tee ../backend-tests.txt
-          exit ${PIPESTATUS[0]}
-
-      - name: Live TikTok oEmbed check (informational)
-        continue-on-error: true
-        run: node backend/scripts/live-check.mjs | tee live-checks.txt
-
       - name: Unit tests and build debug APK
         run: |
           set +e
           echo "::add-matcher::.github/kotlin-problem-matcher.json"
-          ./gradlew --stacktrace testDebugUnitTest assembleDebug assembleDebugAndroidTest -PbackendUrl="${BACKEND_URL}" 2>&1 | tee build-log.txt
+          ./gradlew --stacktrace testDebugUnitTest assembleDebug assembleDebugAndroidTest 2>&1 | tee build-log.txt
           status=${PIPESTATUS[0]}
           if [ $status -ne 0 ]; then grep -A3 "What went wrong" build-log.txt | head -12 | while IFS= read -r l; do [ -n "$l" ] && echo "::error title=Gradle::$l"; done; fi
           exit $status
@@ -93,6 +76,7 @@ jobs:
           grep -E "\| PASS \|" test-report.md | sed -E 's/^\| `([^`]+)`.*/\1/' | tr '\n' ' ' | sed 's/^/::notice title=Passed tests::/'; echo
           grep -E "FAIL" test-report.md | head -10 | while IFS= read -r l; do echo "::error title=Test failure::$l"; done
           echo "::notice title=Result::$(grep 'Overall' test-report.md | tr -d '*')"
+          grep "SVD-LIVE" svd-test-logcat.txt 2>/dev/null | sed -E 's/.*SVD-LIVE: //' | while IFS= read -r l; do echo "::notice title=Live check (real site)::$l"; done
           if [ -f emulator-failed ]; then grep -E "FAILED|Exception|Error:" emulator-log.txt | head -8 | while IFS= read -r l; do echo "::error title=Emulator::$l"; done; fi
           (cd screenshots 2>/dev/null && find . -name '*.png' | head -20 | xargs -r zip -j ../test-screenshots.zip) || true
           tail -n 200 build-log.txt > build-log-tail.txt 2>/dev/null || true
@@ -116,7 +100,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${GITHUB_REF_NAME}"
-          NOTES="Test build of Social Video Downloader (debug APK, Android 10+). See README for backend setup and platform limits. Automated test report attached (test-report.md)."
+          NOTES="Test build of Social Video Downloader (debug APK, Android 10+). See README for how downloads work and their limits. Automated test report attached (test-report.md)."
           gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --prerelease --title "Social Video Downloader $TAG" --notes "$NOTES" --verify-tag
           FILES="dist/${APK_NAME} test-report.md"
           [ -f test-screenshots.zip ] && FILES="$FILES test-screenshots.zip"

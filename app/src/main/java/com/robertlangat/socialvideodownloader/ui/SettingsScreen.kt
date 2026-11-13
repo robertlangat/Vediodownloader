@@ -43,6 +43,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -59,6 +60,7 @@ import com.robertlangat.socialvideodownloader.BuildConfig
 import com.robertlangat.socialvideodownloader.R
 import com.robertlangat.socialvideodownloader.ads.Ads
 import com.robertlangat.socialvideodownloader.data.Platform
+import com.robertlangat.socialvideodownloader.data.SignIn
 import com.robertlangat.socialvideodownloader.data.VideoDownloader
 import com.robertlangat.socialvideodownloader.ui.theme.BrandRed
 import com.robertlangat.socialvideodownloader.ui.theme.Charcoal
@@ -67,12 +69,11 @@ import com.robertlangat.socialvideodownloader.ui.theme.TextMuted
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(viewModel: DownloadViewModel, onBack: () -> Unit) {
+fun SettingsScreen(viewModel: DownloadViewModel, onBack: () -> Unit, onSignIn: (Platform) -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val permission = rememberStoragePermission()
-    var advancedOpen by rememberSaveable { mutableStateOf(false) }
-    var serviceUrl by rememberSaveable { mutableStateOf(state.backendUrl) }
+    var signedIn by remember { mutableStateOf(Platform.entries.filter { SignIn.isSignedIn(it) }.toSet()) }
 
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) {
@@ -165,32 +166,29 @@ fun SettingsScreen(viewModel: DownloadViewModel, onBack: () -> Unit) {
                 Muted("The default folder (Movies/SocialVideoDownloader) shows up in your Gallery right away.")
             }
 
-            // ---- Accounts ----
-            Section("Connected accounts") {
-                Muted("Connect the accounts whose videos you want to save. Instagram: your Professional account. Facebook: Pages you manage.")
-                listOf(Platform.INSTAGRAM, Platform.FACEBOOK).forEach { p ->
-                    val connected = p.apiName in state.connected
+            // ---- Sign-ins ----
+            Section("Sign in (optional)") {
+                Muted("Instagram and Facebook often show videos only to signed-in people. Sign in once here; your login stays on this phone.")
+                Platform.entries.forEach { p ->
+                    val on = p in signedIn
                     OutlinedButton(
-                        onClick = {
-                            val start = viewModel.authStartUrl(p)
-                            if (start != null) {
-                                openUrl(context, start)
-                            } else {
-                                advancedOpen = true
-                                toast(context, "Add the download service address under Advanced first")
-                            }
-                        },
+                        onClick = { onSignIn(p) },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("connect_${p.apiName}"),
+                            .testTag("signin_${p.apiName}"),
                     ) {
-                        Text(if (connected) "${p.label}: connected ✓ (reconnect)" else "Connect ${p.label}", color = Color.White)
+                        Text(if (on) "${p.label}: signed in ✓" else "Sign in to ${p.label}", color = Color.White)
                     }
                 }
-                if (state.connected.isNotEmpty()) {
-                    TextButton(onClick = viewModel::disconnectAll) { Text("Disconnect all accounts", color = BrandRed) }
+                if (signedIn.isNotEmpty()) {
+                    TextButton(
+                        onClick = {
+                            SignIn.signOutAll()
+                            signedIn = emptySet()
+                            toast(context, "Signed out")
+                        },
+                    ) { Text("Sign out of all", color = BrandRed) }
                 }
-                Muted("TikTok doesn't offer video downloads to other apps, so there's nothing to connect.")
             }
 
             // ---- Ads & privacy ----
@@ -199,57 +197,6 @@ fun SettingsScreen(viewModel: DownloadViewModel, onBack: () -> Unit) {
                 if (Ads.privacyOptionsRequired) {
                     OutlinedButton(onClick = { context.findActivity()?.let { Ads.showPrivacyOptions(it) } }) {
                         Text("Privacy options", color = Color.White)
-                    }
-                }
-            }
-
-            // ---- Advanced (download service) ----
-            Card(
-                colors = CardDefaults.cardColors(containerColor = CharcoalRaised),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { advancedOpen = !advancedOpen }
-                            .testTag("advanced_toggle"),
-                    ) {
-                        Text("Advanced", color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                        Icon(
-                            if (advancedOpen) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-                            contentDescription = null,
-                            tint = Color.White,
-                        )
-                    }
-                    if (advancedOpen) {
-                        Muted("Address of the download service that checks Instagram and Facebook links (see the README).")
-                        OutlinedTextField(
-                            value = serviceUrl,
-                            onValueChange = { serviceUrl = it },
-                            label = { Text("Download service address") },
-                            placeholder = { Text("https://your-service.example.com") },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = BrandRed,
-                                focusedLabelColor = BrandRed,
-                                cursorColor = BrandRed,
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("backend_url_field"),
-                        )
-                        Button(
-                            onClick = {
-                                viewModel.saveBackendUrl(serviceUrl)
-                                toast(context, "Saved")
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = BrandRed),
-                            modifier = Modifier.testTag("settings_save"),
-                        ) { Text("Save") }
                     }
                 }
             }

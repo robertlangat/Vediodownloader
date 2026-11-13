@@ -12,7 +12,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.robertlangat.socialvideodownloader.ads.Ads
 import com.robertlangat.socialvideodownloader.ui.DownloadViewModel
+import com.robertlangat.socialvideodownloader.data.Platform
 import com.robertlangat.socialvideodownloader.ui.HomeScreen
+import com.robertlangat.socialvideodownloader.ui.LoginScreen
 import com.robertlangat.socialvideodownloader.ui.SettingsScreen
 import com.robertlangat.socialvideodownloader.ui.theme.SocialVideoDownloaderTheme
 
@@ -26,11 +28,20 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) handleIntent(intent)
         setContent {
             SocialVideoDownloaderTheme {
-                var showSettings by rememberSaveable { mutableStateOf(false) }
-                if (showSettings) {
-                    SettingsScreen(viewModel, onBack = { showSettings = false })
-                } else {
-                    HomeScreen(viewModel, onOpenSettings = { showSettings = true })
+                // "home", "settings", or "login:<PLATFORM>"
+                var screen by rememberSaveable { mutableStateOf("home") }
+                var returnTo by rememberSaveable { mutableStateOf("home") }
+                val openLogin: (Platform) -> Unit = { p ->
+                    returnTo = screen
+                    screen = "login:${p.name}"
+                }
+                when {
+                    screen.startsWith("login:") -> LoginScreen(Platform.valueOf(screen.removePrefix("login:"))) {
+                        screen = returnTo
+                    }
+
+                    screen == "settings" -> SettingsScreen(viewModel, onBack = { screen = "home" }, onSignIn = openLogin)
+                    else -> HomeScreen(viewModel, onOpenSettings = { screen = "settings" }, onSignIn = openLogin)
                 }
             }
         }
@@ -44,17 +55,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
-        intent ?: return
-        when (intent.action) {
-            Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)?.let { viewModel.onPasted(it) }
-            Intent.ACTION_VIEW -> {
-                val data = intent.data ?: return
-                if (data.scheme == AUTH_SCHEME && data.host == "auth") viewModel.onAuthCallback(data)
-            }
+        if (intent?.action == Intent.ACTION_SEND) {
+            intent.getStringExtra(Intent.EXTRA_TEXT)?.let { viewModel.onPasted(it) }
         }
-    }
-
-    companion object {
-        const val AUTH_SCHEME = "socialvideodl"
     }
 }

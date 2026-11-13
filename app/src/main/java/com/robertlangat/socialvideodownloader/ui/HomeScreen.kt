@@ -77,7 +77,7 @@ private val ButtonShape = RoundedCornerShape(14.dp)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(viewModel: DownloadViewModel, onOpenSettings: () -> Unit) {
+fun HomeScreen(viewModel: DownloadViewModel, onOpenSettings: () -> Unit, onSignIn: (Platform) -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
@@ -196,7 +196,7 @@ fun HomeScreen(viewModel: DownloadViewModel, onOpenSettings: () -> Unit) {
                 Text("DOWNLOAD", fontSize = 18.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
             }
 
-            StatusArea(state, viewModel, onOpenSettings)
+            StatusArea(state, viewModel, onOpenSettings, onSignIn)
 
             // Supported apps
             Text(
@@ -316,7 +316,12 @@ private fun PermissionCard(permission: StoragePermissionState) {
 }
 
 @Composable
-private fun StatusArea(state: UiState, viewModel: DownloadViewModel, onOpenSettings: () -> Unit) {
+private fun StatusArea(
+    state: UiState,
+    viewModel: DownloadViewModel,
+    onOpenSettings: () -> Unit,
+    onSignIn: (Platform) -> Unit,
+) {
     val phase = state.phase
     if (phase == Phase.Idle) return
     val context = LocalContext.current
@@ -393,23 +398,29 @@ private fun StatusArea(state: UiState, viewModel: DownloadViewModel, onOpenSetti
 
                 is Phase.Unavailable -> {
                     StatusText(phase.message)
-                    OutlinedButton(
-                        onClick = { openUrl(context, phase.originalUrl) },
-                        modifier = Modifier.testTag("open_original_button"),
-                    ) { Text(phase.openLabel, color = Color.White) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (phase.canRetry) {
+                            Button(
+                                onClick = viewModel::retry,
+                                colors = ButtonDefaults.buttonColors(containerColor = BrandRed),
+                                modifier = Modifier.testTag("retry_button"),
+                            ) { Text("Retry") }
+                        }
+                        OutlinedButton(
+                            onClick = { openUrl(context, phase.originalUrl) },
+                            modifier = Modifier.testTag("open_original_button"),
+                        ) { Text(phase.openLabel, color = Color.White) }
+                    }
                 }
 
-                is Phase.AuthRequired -> {
+                is Phase.LoginRequired -> {
                     StatusText(phase.message)
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Button(
-                            onClick = {
-                                val url = viewModel.authStartUrl(phase.platform, phase.authUrl)
-                                if (url != null) openUrl(context, url) else onOpenSettings()
-                            },
+                            onClick = { onSignIn(phase.platform) },
                             colors = ButtonDefaults.buttonColors(containerColor = BrandRed),
-                            modifier = Modifier.testTag("connect_button"),
-                        ) { Text("Connect ${phase.platform.label}") }
+                            modifier = Modifier.testTag("signin_button"),
+                        ) { Text("Sign in to ${phase.platform.label}") }
                         OutlinedButton(
                             onClick = { openUrl(context, phase.originalUrl) },
                             modifier = Modifier.testTag("open_original_button"),

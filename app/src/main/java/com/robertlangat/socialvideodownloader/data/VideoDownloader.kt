@@ -39,9 +39,12 @@ class VideoDownloader(
         displayName: String,
         mimeType: String,
         folder: Uri? = null,
+        headers: Map<String, String> = emptyMap(),
         onProgress: (downloaded: Long, total: Long) -> Unit,
     ): SavedVideo = withContext(Dispatchers.IO) {
-        val request = Request.Builder().url(url).get().build()
+        val builder = Request.Builder().url(url).get()
+        headers.forEach { (k, v) -> builder.header(k, v) }
+        val request = builder.build()
         val call = http.newCall(request)
         // Abort the socket as soon as the user taps Cancel, even while a read is blocked.
         val watcher = launch {
@@ -72,7 +75,10 @@ class VideoDownloader(
         onProgress: (downloaded: Long, total: Long) -> Unit,
     ): SavedVideo {
         when {
-            resp.code == 403 || resp.code == 404 || resp.code == 410 ->
+            resp.code == 403 ->
+                throw RetryableException("The site refused the download (HTTP 403). Tap Retry; if it keeps happening, sign in under Settings.")
+
+            resp.code == 404 || resp.code == 410 ->
                 throw DownloadUnavailableException(
                     "The video file is no longer available (HTTP ${resp.code}). It may have been removed or made private."
                 )

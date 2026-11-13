@@ -5,13 +5,12 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.robertlangat.socialvideodownloader.SvdApp
-import com.robertlangat.socialvideodownloader.data.ConfigurationException
 import com.robertlangat.socialvideodownloader.data.DownloadUnavailableException
+import com.robertlangat.socialvideodownloader.data.Extraction
 import com.robertlangat.socialvideodownloader.data.FolderAccessException
 import com.robertlangat.socialvideodownloader.data.LinkParser
 import com.robertlangat.socialvideodownloader.data.ParsedLink
 import com.robertlangat.socialvideodownloader.data.Platform
-import com.robertlangat.socialvideodownloader.data.ResolveResult
 import com.robertlangat.socialvideodownloader.data.RetryableException
 import com.robertlangat.socialvideodownloader.data.VideoDownloader
 import kotlinx.coroutines.CancellationException
@@ -33,14 +32,10 @@ sealed interface Phase {
         val message: String,
         val originalUrl: String,
         val openLabel: String = "Open original post",
-    ) : Phase
-    data class AuthRequired(
-        val platform: Platform,
-        val message: String,
-        val authUrl: String?,
-        val originalUrl: String,
+        val canRetry: Boolean = false,
     ) : Phase
 
+    data class LoginRequired(val platform: Platform, val message: String, val originalUrl: String) : Phase
     data class Failed(val message: String, val openSettings: Boolean = false) : Phase
     data object Cancelled : Phase
 }
@@ -50,8 +45,6 @@ data class UiState(
     val input: String = "",
     val detected: ParsedLink? = null,
     val phase: Phase = Phase.Idle,
-    val backendUrl: String = "",
-    val connected: Set<String> = emptySet(),
     val saveFolderLabel: String = VideoDownloader.DEFAULT_LOCATION,
     val customFolder: Boolean = false,
 ) {
@@ -67,8 +60,6 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _state = MutableStateFlow(
         UiState(
-            backendUrl = settings.backendUrl,
-            connected = settings.connectedPlatforms,
             saveFolderLabel = folderLabel(settings.saveTreeUri),
             customFolder = settings.saveTreeUri != null,
         )
@@ -103,26 +94,22 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
     fun startDownload() {
         val link = _state.value.detected ?: return
         if (_state.value.isBusy) return
-        if (link.platform == Platform.TIKTOK) {
-            // TikTok's official APIs don't hand video files to other apps, so there is nothing to resolve.
-            _state.update { it.copy(phase = Phase.Unavailable(TIKTOK_MESSAGE, link.url, openLabel = "Open in TikTok")) }
-            return
-        }
         job = viewModelScope.launch {
             _state.update { it.copy(phase = Phase.Checking) }
             try {
-                when (val result = container.resolver.resolve(link)) {
-                    is ResolveResult.Ready -> download(link, result)
-                    is ResolveResult.Unavailable ->
-                        _state.update { it.copy(phase = Phase.Unavailable(result.message, result.originalUrl)) }
+                when (val result = container.extractor.extract(link)) {
+                    is Extraction.Found -> download(link, result)
+                    is Extraction.LoginRequired -> _state.update {
+                        it.copy(phase = Phase.LoginRequired(link.platform, result.message, link.url))
+                    }
 
-                    is ResolveResult.AuthRequired -> _state.update {
+                    is Extraction.Unavailable -> _state.update {
                         it.copy(
-                            phase = Phase.AuthRequired(
-                                result.platform ?: link.platform,
+                            phase = Phase.Unavailable(
                                 result.message,
-                                result.authUrl,
-                                result.originalUrl,
+                                link.url,
+                                openLabel = "Open in ${link.platform.label}",
+                                canRetry = result.canRetry,
                             )
                         )
                     }
@@ -132,11 +119,11 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: RetryableException) {
                 _state.update { it.copy(phase = Phase.NetworkError(e.message ?: "Network error.")) }
             } catch (e: DownloadUnavailableException) {
-                _state.update { it.copy(phase = Phase.Unavailable(e.message ?: "Unavailable.", link.url)) }
+                _state.update {
+                    it.copy(phase = Phase.Unavailable(e.message ?: "Unavailable.", link.url, "Open in ${link.platform.label}"))
+                }
             } catch (e: FolderAccessException) {
                 _state.update { it.copy(phase = Phase.Failed(e.message ?: "Can't write to the save folder.", openSettings = true)) }
-            } catch (e: ConfigurationException) {
-                _state.update { it.copy(phase = Phase.Failed(e.message ?: "Not configured.", openSettings = true)) }
             } catch (e: IOException) {
                 _state.update { it.copy(phase = Phase.NetworkError(e.message ?: "Network error.")) }
             } catch (e: Exception) {
@@ -145,23 +132,16 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private suspend fun download(link: ParsedLink, ready: ResolveResult.Ready) {
+    private suspend fun download(link: ParsedLink, found: Extraction.Found) {
         _state.update { it.copy(phase = Phase.Downloading(0, -1)) }
-        val name = VideoDownloader.buildFileName(ready.fileName ?: ready.title, link.platform)
-        val mime = ready.mimeType?.takeIf { it.startsWith("video/") } ?: "video/mp4"
+        val name = VideoDownloader.buildFileName(null, link.platform)
         val folder = settings.saveTreeUri?.let { Uri.parse(it) }
-        val saved = container.downloader.download(ready.downloadUrl, name, mime, folder) { done, total ->
+        val saved = container.downloader.download(found.videoUrl, name, "video/mp4", folder, found.headers) { done, total ->
             _state.update { s ->
                 if (s.phase is Phase.Downloading) s.copy(phase = Phase.Downloading(done, total)) else s
             }
         }
         _state.update { it.copy(phase = Phase.Saved(saved.uri, saved.displayName, saved.location)) }
-    }
-
-    companion object {
-        const val TIKTOK_MESSAGE =
-            "TikTok doesn't allow other apps to download its videos. To save this one, open it in TikTok and tap " +
-                "Share → Save video (available when the creator allows downloads)."
     }
 
     fun cancel() {
@@ -172,38 +152,6 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
 
     fun retry() = startDownload()
 
-    fun saveBackendUrl(url: String) {
-        settings.backendUrl = url
-        _state.update { it.copy(backendUrl = settings.backendUrl) }
-    }
-
-    /** Builds the backend URL that starts the OAuth flow for [platform]. */
-    fun authStartUrl(platform: Platform, suggested: String? = null): String? {
-        val base = settings.backendUrl
-        if (base.isBlank()) return null
-        val start = suggested ?: "$base/auth/${platform.apiName}/start"
-        val session = settings.sessionToken
-        return if (session.isNullOrBlank()) start
-        else start + (if (start.contains('?')) "&" else "?") + "session=" + Uri.encode(session)
-    }
-
-    /** Handles socialvideodl://auth?session=...&platform=... coming back from the backend. */
-    fun onAuthCallback(uri: Uri) {
-        val session = uri.getQueryParameter("session")
-        val platform = Platform.fromApiName(uri.getQueryParameter("platform"))
-        val error = uri.getQueryParameter("error")
-        if (!error.isNullOrBlank()) {
-            _state.update { it.copy(phase = Phase.Failed("Account connection failed: $error")) }
-            return
-        }
-        if (session.isNullOrBlank()) return
-        settings.sessionToken = session
-        if (platform != null) settings.connectedPlatforms = settings.connectedPlatforms + platform.apiName
-        _state.update { it.copy(connected = settings.connectedPlatforms) }
-        // Resume the download the user was trying to make before connecting.
-        if (_state.value.phase is Phase.AuthRequired && _state.value.detected != null) startDownload()
-    }
-
     /** null = default Movies/SocialVideoDownloader (Gallery) folder. */
     fun setSaveFolder(tree: Uri?) {
         settings.saveTreeUri = tree?.toString()
@@ -212,10 +160,4 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun folderLabel(tree: String?): String =
         tree?.let { VideoDownloader.folderLabel(Uri.parse(it)) } ?: VideoDownloader.DEFAULT_LOCATION
-
-    fun disconnectAll() {
-        settings.sessionToken = null
-        settings.connectedPlatforms = emptySet()
-        _state.update { it.copy(connected = emptySet()) }
-    }
 }

@@ -31,6 +31,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.robertlangat.socialvideodownloader.ads.Ads
+import com.robertlangat.socialvideodownloader.data.PageUrls
 import com.robertlangat.socialvideodownloader.data.Settings
 import com.robertlangat.socialvideodownloader.data.VideoDownloader
 import okhttp3.mockwebserver.Dispatcher
@@ -39,7 +40,6 @@ import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 import okhttp3.mockwebserver.SocketPolicy
 import okio.Buffer
-import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -56,7 +56,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * End-to-end tests of the paste -> check -> download -> save-to-Gallery flow.
  *
  * A MockWebServer on the device plays both roles that exist in production:
- *  - the resolver backend (POST /api/resolve), returning the same JSON the real backend returns, and
+ *  - the TikTok / Instagram / Facebook post pages (GET /page), with the same JSON the real pages embed, and
  *  - the platform CDN that serves the authorised video file (GET /media/...).
  * The served file is a real H.264/AAC MP4 (androidTest/assets/sample.mp4).
  */
@@ -73,7 +73,7 @@ class DownloadFlowTest {
         InstrumentationRegistry.getInstrumentation().context.assets.open("sample.mp4").use { it.readBytes() }
     }
     private val runId = System.currentTimeMillis()
-    private val resolveCalls = AtomicInteger(0)
+    private val pageLoads = AtomicInteger(0)
     private val breakNextDownload = AtomicBoolean(false)
 
     @Before
@@ -85,10 +85,9 @@ class DownloadFlowTest {
         server.start(InetAddress.getByName("127.0.0.1"), 0)
 
         Ads.disabled = true // full-screen ads must not cover the UI under test
-        Settings(context).apply {
-            clear()
-            backendUrl = server.url("/").toString()
-        }
+        Settings(context).clear()
+        // Serve "post pages" from the local server instead of the real sites.
+        PageUrls.rewrite = { u -> server.url("/page").newBuilder().addQueryParameter("u", u).build().toString() }
         scenario = ActivityScenario.launch(MainActivity::class.java)
         compose.waitForIdle()
     }
@@ -96,43 +95,41 @@ class DownloadFlowTest {
     @After
     fun tearDown() {
         scenario.close()
+        PageUrls.rewrite = null
         server.shutdown()
     }
 
     private fun route(request: RecordedRequest): MockResponse {
         val path = request.path ?: ""
         return when {
-            path.startsWith("/api/resolve") -> {
-                resolveCalls.incrementAndGet()
-                val body = JSONObject(request.body.readUtf8())
-                val url = body.getString("url")
-                val platform = body.getString("platform")
-                val json = when {
-                    url.contains("9999999999") || url.contains("REMOVED") || url.contains("removed") -> JSONObject()
-                        .put("status", "unavailable")
-                        .put("reason", "removed")
-                        .put("message", "This post was removed or is private, so it can't be downloaded.")
-                        .put("originalUrl", url)
-
-                    else -> {
-                        val media = when {
-                            breakNextDownload.getAndSet(false) -> "broken"
-                            url.contains("SLOW") || url.contains("5555555555") -> "slow"
-                            else -> "ok"
-                        }
-                        JSONObject()
-                            .put("status", "ready")
-                            .put("downloadUrl", server.url("/media/$media.mp4").toString())
-                            .put("fileName", "${platform}_test_${runId}_${resolveCalls.get()}.mp4")
-                            .put("mimeType", "video/mp4")
-                    }
+            path.startsWith("/page") -> {
+                pageLoads.incrementAndGet()
+                val url = request.requestUrl?.queryParameter("u").orEmpty()
+                val media = when {
+                    breakNextDownload.getAndSet(false) -> "broken"
+                    url.contains("SLOW") || url.contains("5555555555") -> "slow"
+                    else -> "ok"
                 }
-                MockResponse().setHeader("Content-Type", "application/json").setBody(json.toString())
+                val mediaUrl = server.url("/media/$media.mp4").toString()
+                val slashEscaped = mediaUrl.replace("/", "\\/")
+                val body = when {
+                    url.contains("LOGINWALL") ->
+                        return MockResponse().setResponseCode(302).setHeader("Location", "/accounts/login/?next=%2Freel%2F")
+                    url.contains("9999999999") ->
+                        """<html><body><script type="application/json">{"webapp.video-detail":{"statusCode":10204,"statusMsg":"item doesn't exist"}}</script></body></html>"""
+                    url.contains("tiktok") ->
+                        """<html><body><script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application/json">{"__DEFAULT_SCOPE__":{"webapp.video-detail":{"itemInfo":{"itemStruct":{"video":{"playAddr":"${mediaUrl.replace("/", "\\u002F")}"}}}}}}</script></body></html>"""
+                    url.contains("instagram") ->
+                        """<html><body><script type="application/json">{"items":[{"video_versions":[{"type":101,"url":"$slashEscaped"}]}]}</script></body></html>"""
+                    else ->
+                        """<html><body><script type="application/json">{"video":{"browser_native_sd_url":"$slashEscaped","browser_native_hd_url":"$slashEscaped"}}</script></body></html>"""
+                }
+                MockResponse().setHeader("Content-Type", "text/html; charset=utf-8").setBody(body)
             }
 
-            path.startsWith("/website") -> MockResponse()
+            path.startsWith("/accounts/login") -> MockResponse()
                 .setHeader("Content-Type", "text/html")
-                .setBody("<!doctype html><html><body>Some website</body></html>")
+                .setBody("<html><body>Log in</body></html>")
 
             path.startsWith("/media/ok.mp4") -> MockResponse()
                 .setHeader("Content-Type", "video/mp4")
@@ -182,7 +179,7 @@ class DownloadFlowTest {
             arrayOf(MediaStore.Video.Media._ID, MediaStore.Video.Media.DISPLAY_NAME, MediaStore.Video.Media.IS_PENDING),
             "${MediaStore.Video.Media.DISPLAY_NAME} LIKE ? AND ${MediaStore.Video.Media.RELATIVE_PATH} LIKE ?",
             arrayOf("$prefix%", "%${VideoDownloader.ALBUM}%"),
-            null,
+            "${MediaStore.Video.Media._ID} DESC",
         )?.use { c ->
             if (c.moveToFirst()) {
                 assertEquals("saved item must not be pending", 0, c.getInt(2))
@@ -261,7 +258,7 @@ class DownloadFlowTest {
         waitForTag("open_video_button")
         compose.onNodeWithTag("share_button").assertExists()
         screenshot("saved_$apiName")
-        val uri = findSaved("${apiName}_test_$runId")
+        val uri = findSaved("${apiName}_")
         assertNotNull("video should be in MediaStore", uri)
         assertPlayable(uri!!)
         Log.i("SVD-TEST", "PASS $apiName saved=$uri status='${statusText()}'")
@@ -270,26 +267,22 @@ class DownloadFlowTest {
     // ---------- tests ----------
 
     @Test
-    fun tiktok_explainsLimitAndOffersOpenInTikTok_withoutCallingService() {
-        enterLink("https://vm.tiktok.com/ZMeAbCdEf/")
-        assertSelected("platform_TIKTOK")
-        compose.onNodeWithTag("download_button").assertIsEnabled().performClick()
-        waitForTag("open_original_button")
-        assertTrue(statusText(), statusText().contains("TikTok doesn't allow"))
-        compose.onNodeWithTag("open_original_button").assertTextContains("Open in TikTok")
-        assertEquals("TikTok links must not hit the service", 0, resolveCalls.get())
-        screenshot("tiktok_explained")
-    }
+    fun tiktok_pasteToDownload_savesPlayableVideo() =
+        downloadAndVerify("https://vm.tiktok.com/ZMeAbCdEf/", "platform_TIKTOK", "tiktok")
 
     @Test
-    fun wrongServiceAddress_returningWebPage_pointsToSettings() {
-        Settings(context).backendUrl = server.url("/website").toString()
-        enterLink("https://www.instagram.com/reel/C1a2B3c4D5e/")
+    fun instagramLoginWall_offersSignIn() {
+        enterLink("https://www.instagram.com/reel/LOGINWALL1/")
         compose.onNodeWithTag("download_button").performClick()
-        waitForTag("open_settings_button")
-        assertTrue(statusText(), statusText().contains("isn't a Social Video Downloader service"))
-        compose.onNodeWithTag("retry_button").assertDoesNotExist()
-        screenshot("wrong_service_address")
+        waitForTag("signin_button")
+        assertTrue(statusText(), statusText().contains("signed-in"))
+        screenshot("instagram_login_wall")
+        compose.onNodeWithTag("signin_button").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("login_webview").assertExists()
+        compose.onNodeWithTag("login_done").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("download_button").assertExists()
     }
 
     @Test
@@ -326,19 +319,19 @@ class DownloadFlowTest {
     }
 
     @Test
-    fun settings_showsStorageFolderAndHidesServiceUrlUnderAdvanced() {
+    fun settings_showsStorageFolderAndSignIns_noServiceAddress() {
         compose.onNodeWithTag("settings_button").performClick()
         compose.waitForIdle()
         compose.onNodeWithTag("settings_screen").assertExists()
         compose.onNodeWithTag("allow_storage_button").assertExists()
         compose.onNodeWithTag("choose_folder_button").assertExists()
         compose.onNodeWithTag("save_folder_label").assertTextContains("Movies/SocialVideoDownloader")
+        compose.onNodeWithTag("signin_instagram").performScrollTo().assertExists()
+        compose.onNodeWithTag("signin_facebook").assertExists()
+        compose.onNodeWithTag("signin_tiktok").assertExists()
         compose.onNodeWithTag("backend_url_field").assertDoesNotExist()
+        compose.onNodeWithTag("advanced_toggle").assertDoesNotExist()
         screenshot("settings")
-        compose.onNodeWithTag("advanced_toggle").performScrollTo().performClick()
-        compose.waitForIdle()
-        compose.onNodeWithTag("backend_url_field").assertExists()
-        screenshot("settings_advanced")
         compose.onNodeWithTag("settings_back").performClick()
         compose.waitForIdle()
         compose.onNodeWithTag("download_button").assertExists()
@@ -352,16 +345,16 @@ class DownloadFlowTest {
         compose.onNodeWithTag("invalid_hint", useUnmergedTree = true).assertExists()
         enterLink("https://www.instagram.com/someprofile/")
         compose.onNodeWithTag("download_button").assertIsNotEnabled()
-        assertEquals("no backend call for invalid links", 0, resolveCalls.get())
+        assertEquals("invalid links must not be opened", 0, pageLoads.get())
         screenshot("invalid_link")
     }
 
     @Test
     fun unavailablePost_explainsAndOffersOriginal() {
-        enterLink("https://www.instagram.com/reel/REMOVEDpost1/")
+        enterLink("https://www.tiktok.com/@someone/video/9999999999123")
         compose.onNodeWithTag("download_button").performClick()
         waitForTag("open_original_button")
-        assertTrue(statusText(), statusText().contains("removed or is private"))
+        assertTrue(statusText(), statusText().contains("private, removed"))
         compose.onNodeWithTag("retry_button").assertDoesNotExist()
         screenshot("unavailable_post")
     }
@@ -378,7 +371,7 @@ class DownloadFlowTest {
 
         compose.onNodeWithTag("retry_button").performClick()
         waitForTag("open_video_button")
-        val uri = findSaved("facebook_test_$runId")
+        val uri = findSaved("facebook_")
         assertNotNull(uri)
         assertPlayable(uri!!)
     }

@@ -4,8 +4,6 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-val backendUrl: String = (project.findProperty("backendUrl") as String?)?.trim().orEmpty()
-
 // AdMob. Pass -PuseTestAds=true to build with Google's sample ad units instead of the live ones.
 val useTestAds: Boolean = (project.findProperty("useTestAds") as String?)?.toBoolean() ?: false
 val admobAppId = if (useTestAds) "ca-app-pub-3940256099942544~3347511713" else "ca-app-pub-8306955081407788~3472373851"
@@ -20,11 +18,10 @@ android {
         applicationId = "com.robertlangat.socialvideodownloader"
         minSdk = 29
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.2.1-test"
+        versionCode = 4
+        versionName = "0.3.0-test"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "BACKEND_URL", "\"$backendUrl\"")
         buildConfigField("String", "ADMOB_BANNER_ID", "\"$admobBannerId\"")
         buildConfigField("String", "ADMOB_INTERSTITIAL_ID", "\"$admobInterstitialId\"")
         manifestPlaceholders["admobAppId"] = admobAppId
