@@ -396,7 +396,7 @@ private fun StatusArea(state: UiState, viewModel: DownloadViewModel, onOpenSetti
                     OutlinedButton(
                         onClick = { openUrl(context, phase.originalUrl) },
                         modifier = Modifier.testTag("open_original_button"),
-                    ) { Text("Open original post", color = Color.White) }
+                    ) { Text(phase.openLabel, color = Color.White) }
                 }
 
                 is Phase.AuthRequired -> {

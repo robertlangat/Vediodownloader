@@ -79,13 +79,20 @@ class ResolverClient(
             } catch (e: IOException) {
                 throw RetryableException("The connection was interrupted while checking the link.", e)
             }
-            if (resp.code >= 500 || resp.code == 429) {
+            if (resp.code == 429 || (resp.code >= 500 && text.trimStart().startsWith("{").not())) {
                 throw RetryableException("The download service is busy or unavailable (HTTP ${resp.code}). Try again.")
             }
             val json = try {
                 JSONObject(text)
             } catch (e: JSONException) {
-                throw RetryableException("The download service sent an unexpected response (HTTP ${resp.code}).")
+                if (resp.code >= 500) {
+                    throw RetryableException("The download service had a problem (HTTP ${resp.code}). Try again.")
+                }
+                // A web page (or anything that isn't the service's JSON) means the address is wrong.
+                throw ConfigurationException(
+                    "The download service address in Settings → Advanced ($base) isn't a Social Video Downloader " +
+                        "service — it returned a web page. Enter the address of your deployed backend (see the README)."
+                )
             }
             parse(json, link)
         }

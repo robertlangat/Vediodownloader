@@ -29,7 +29,11 @@ sealed interface Phase {
     data class Downloading(val downloaded: Long, val total: Long) : Phase
     data class Saved(val uri: Uri, val fileName: String, val location: String) : Phase
     data class NetworkError(val message: String) : Phase
-    data class Unavailable(val message: String, val originalUrl: String) : Phase
+    data class Unavailable(
+        val message: String,
+        val originalUrl: String,
+        val openLabel: String = "Open original post",
+    ) : Phase
     data class AuthRequired(
         val platform: Platform,
         val message: String,
@@ -99,6 +103,11 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
     fun startDownload() {
         val link = _state.value.detected ?: return
         if (_state.value.isBusy) return
+        if (link.platform == Platform.TIKTOK) {
+            // TikTok's official APIs don't hand video files to other apps, so there is nothing to resolve.
+            _state.update { it.copy(phase = Phase.Unavailable(TIKTOK_MESSAGE, link.url, openLabel = "Open in TikTok")) }
+            return
+        }
         job = viewModelScope.launch {
             _state.update { it.copy(phase = Phase.Checking) }
             try {
@@ -147,6 +156,12 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         _state.update { it.copy(phase = Phase.Saved(saved.uri, saved.displayName, saved.location)) }
+    }
+
+    companion object {
+        const val TIKTOK_MESSAGE =
+            "TikTok doesn't allow other apps to download its videos. To save this one, open it in TikTok and tap " +
+                "Share → Save video (available when the creator allows downloads)."
     }
 
     fun cancel() {

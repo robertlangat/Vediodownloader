@@ -130,6 +130,10 @@ class DownloadFlowTest {
                 MockResponse().setHeader("Content-Type", "application/json").setBody(json.toString())
             }
 
+            path.startsWith("/website") -> MockResponse()
+                .setHeader("Content-Type", "text/html")
+                .setBody("<!doctype html><html><body>Some website</body></html>")
+
             path.startsWith("/media/ok.mp4") -> MockResponse()
                 .setHeader("Content-Type", "video/mp4")
                 .setBody(Buffer().write(sampleBytes))
@@ -266,8 +270,27 @@ class DownloadFlowTest {
     // ---------- tests ----------
 
     @Test
-    fun tiktok_pasteToDownload_savesPlayableVideo() =
-        downloadAndVerify("https://www.tiktok.com/@scout2015/video/6718335390845095173", "platform_TIKTOK", "tiktok")
+    fun tiktok_explainsLimitAndOffersOpenInTikTok_withoutCallingService() {
+        enterLink("https://vm.tiktok.com/ZMeAbCdEf/")
+        assertSelected("platform_TIKTOK")
+        compose.onNodeWithTag("download_button").assertIsEnabled().performClick()
+        waitForTag("open_original_button")
+        assertTrue(statusText(), statusText().contains("TikTok doesn't allow"))
+        compose.onNodeWithTag("open_original_button").assertTextContains("Open in TikTok")
+        assertEquals("TikTok links must not hit the service", 0, resolveCalls.get())
+        screenshot("tiktok_explained")
+    }
+
+    @Test
+    fun wrongServiceAddress_returningWebPage_pointsToSettings() {
+        Settings(context).backendUrl = server.url("/website").toString()
+        enterLink("https://www.instagram.com/reel/C1a2B3c4D5e/")
+        compose.onNodeWithTag("download_button").performClick()
+        waitForTag("open_settings_button")
+        assertTrue(statusText(), statusText().contains("isn't a Social Video Downloader service"))
+        compose.onNodeWithTag("retry_button").assertDoesNotExist()
+        screenshot("wrong_service_address")
+    }
 
     @Test
     fun instagram_pasteToDownload_savesPlayableVideo() =
@@ -362,7 +385,7 @@ class DownloadFlowTest {
 
     @Test
     fun cancelDuringDownload_removesPartialFile() {
-        enterLink("https://www.tiktok.com/@someone/video/5555555555123")
+        enterLink("https://www.instagram.com/reel/SLOWreel001/")
         compose.onNodeWithTag("download_button").performClick()
         waitForTag("cancel_button")
         screenshot("downloading_progress")

@@ -20,8 +20,8 @@ android {
         applicationId = "com.robertlangat.socialvideodownloader"
         minSdk = 29
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0-test"
+        versionCode = 3
+        versionName = "0.2.1-test"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "BACKEND_URL", "\"$backendUrl\"")
