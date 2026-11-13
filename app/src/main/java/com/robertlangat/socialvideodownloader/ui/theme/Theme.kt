@@ -1,48 +1,37 @@
 package com.robertlangat.socialvideodownloader.ui.theme
 
-import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 
-private val Light = lightColorScheme(
-    primary = Color(0xFF3A4BD8),
+val BrandRed = Color(0xFFE53935)
+val BrandRedDark = Color(0xFFC62828)
+val Charcoal = Color(0xFF1C1C1E)
+val CharcoalRaised = Color(0xFF2A2A2D)
+val TextMuted = Color(0xFFB0B0B5)
+
+private val Colors = darkColorScheme(
+    primary = BrandRed,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFDFE0FF),
-    onPrimaryContainer = Color(0xFF000C62),
-    secondary = Color(0xFF5B5D72),
-    error = Color(0xFFBA1A1A),
-)
-
-private val Dark = darkColorScheme(
-    primary = Color(0xFFBCC2FF),
-    onPrimary = Color(0xFF00179B),
-    primaryContainer = Color(0xFF1C2DBF),
-    onPrimaryContainer = Color(0xFFDFE0FF),
-    secondary = Color(0xFFC4C5DD),
-    error = Color(0xFFFFB4AB),
+    primaryContainer = Color(0xFF3A2224),
+    onPrimaryContainer = Color(0xFFFFDAD6),
+    secondary = Color(0xFFFFB4AB),
+    background = Charcoal,
+    onBackground = Color.White,
+    surface = Charcoal,
+    onSurface = Color.White,
+    surfaceVariant = CharcoalRaised,
+    onSurfaceVariant = TextMuted,
+    surfaceContainer = CharcoalRaised,
+    surfaceContainerHigh = Color(0xFF323236),
+    outline = Color(0xFF55555A),
+    error = Color(0xFFFF8A80),
+    errorContainer = Color(0xFF3B2526),
+    onErrorContainer = Color(0xFFFFDAD6),
 )
 
 @Composable
-fun SocialVideoDownloaderTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
-    content: @Composable () -> Unit,
-) {
-    val colors = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val ctx = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
-        }
-
-        darkTheme -> Dark
-        else -> Light
-    }
-    MaterialTheme(colorScheme = colors, content = content)
+fun SocialVideoDownloaderTheme(content: @Composable () -> Unit) {
+    MaterialTheme(colorScheme = Colors, content = content)
 }

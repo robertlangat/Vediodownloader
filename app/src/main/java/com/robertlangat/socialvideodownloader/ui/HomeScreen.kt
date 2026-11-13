@@ -1,127 +1,151 @@
 package com.robertlangat.socialvideodownloader.ui
 
-import android.content.ActivityNotFoundException
-import android.content.Context
-import android.content.Intent
-import android.net.Uri
-import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.robertlangat.socialvideodownloader.R
+import com.robertlangat.socialvideodownloader.ads.Ads
+import com.robertlangat.socialvideodownloader.ads.BannerAd
 import com.robertlangat.socialvideodownloader.data.Platform
 import com.robertlangat.socialvideodownloader.data.VideoDownloader
+import com.robertlangat.socialvideodownloader.ui.theme.BrandRed
+import com.robertlangat.socialvideodownloader.ui.theme.Charcoal
+import com.robertlangat.socialvideodownloader.ui.theme.CharcoalRaised
+import com.robertlangat.socialvideodownloader.ui.theme.TextMuted
 import java.util.Locale
+
+private val FieldShape = RoundedCornerShape(14.dp)
+private val ButtonShape = RoundedCornerShape(14.dp)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(viewModel: DownloadViewModel) {
+fun HomeScreen(viewModel: DownloadViewModel, onOpenSettings: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
-    var showSettings by rememberSaveable { mutableStateOf(false) }
+    val permission = rememberStoragePermission()
 
     Scaffold(
+        containerColor = Charcoal,
         topBar = {
             TopAppBar(
-                title = { Text("Social Video Downloader") },
+                title = { Text("Social Video Downloader", fontWeight = FontWeight.Bold) },
                 actions = {
-                    IconButton(onClick = { showSettings = true }, modifier = Modifier.testTag("settings_button")) {
+                    IconButton(onClick = onOpenSettings, modifier = Modifier.testTag("settings_button")) {
                         Icon(Icons.Filled.Settings, contentDescription = "Settings")
                     }
                 },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Charcoal,
+                    titleContentColor = Color.White,
+                    actionIconContentColor = Color.White,
+                ),
             )
         },
+        bottomBar = { BannerAd(Modifier.navigationBarsPadding()) },
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            // 1. Platform buttons
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                Platform.entries.forEach { p ->
-                    val isSelected = state.selectedPlatform == p
-                    val mod = Modifier
-                        .weight(1f)
-                        .height(48.dp)
-                        .testTag("platform_${p.name}")
-                        .semantics { selected = isSelected }
-                    val pad = PaddingValues(horizontal = 4.dp)
-                    if (isSelected) {
-                        Button(onClick = { viewModel.selectPlatform(p) }, modifier = mod, contentPadding = pad) {
-                            Text(p.label, maxLines = 1, fontWeight = FontWeight.SemiBold)
-                        }
-                    } else {
-                        OutlinedButton(onClick = { viewModel.selectPlatform(p) }, modifier = mod, contentPadding = pad) {
-                            Text(p.label, maxLines = 1)
-                        }
-                    }
-                }
+            if (!permission.granted) {
+                PermissionCard(permission)
             }
 
-            // 2. URL field with Paste shortcut
-            OutlinedTextField(
+            // URL field (white, rounded) with the red Paste shortcut
+            TextField(
                 value = state.input,
                 onValueChange = viewModel::onInputChange,
                 label = { Text("Paste video link") },
-                placeholder = { Text(placeholderFor(state.selectedPlatform)) },
+                placeholder = { Text(placeholderFor(state.selectedPlatform), maxLines = 1) },
                 singleLine = true,
                 isError = state.showInvalidHint,
+                shape = FieldShape,
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                    errorContainerColor = Color.White,
+                    focusedTextColor = Color(0xFF1C1C1E),
+                    unfocusedTextColor = Color(0xFF1C1C1E),
+                    errorTextColor = Color(0xFF1C1C1E),
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    errorIndicatorColor = Color.Transparent,
+                    cursorColor = BrandRed,
+                    focusedLabelColor = Color(0xFF6B6B70),
+                    unfocusedLabelColor = Color(0xFF6B6B70),
+                    errorLabelColor = BrandRed,
+                    focusedPlaceholderColor = Color(0xFF9A9AA0),
+                    unfocusedPlaceholderColor = Color(0xFF9A9AA0),
+                    focusedSupportingTextColor = TextMuted,
+                    unfocusedSupportingTextColor = TextMuted,
+                    errorSupportingTextColor = Color(0xFFFF8A80),
+                    focusedTrailingIconColor = BrandRed,
+                    unfocusedTrailingIconColor = BrandRed,
+                    errorTrailingIconColor = BrandRed,
+                ),
                 supportingText = {
                     when {
                         state.showInvalidHint -> Text(
@@ -133,20 +157,14 @@ fun HomeScreen(viewModel: DownloadViewModel) {
                     }
                 },
                 trailingIcon = {
-                    TextButton(
+                    IconButton(
                         onClick = {
                             val text = clipboard.getText()?.text
-                            if (text.isNullOrBlank()) {
-                                toast(context, "Clipboard is empty")
-                            } else {
-                                viewModel.onPasted(text)
-                            }
+                            if (text.isNullOrBlank()) toast(context, "Clipboard is empty") else viewModel.onPasted(text)
                         },
                         modifier = Modifier.testTag("paste_button"),
                     ) {
-                        Icon(painterResource(R.drawable.ic_paste), contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Paste")
+                        Icon(painterResource(R.drawable.ic_paste), contentDescription = "Paste")
                     }
                 },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
@@ -156,62 +174,170 @@ fun HomeScreen(viewModel: DownloadViewModel) {
                     .testTag("url_field"),
             )
 
-            // 3. Large Download button
+            // Big red Download button
             Button(
                 onClick = viewModel::startDownload,
                 enabled = state.canDownload,
+                shape = ButtonShape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = BrandRed,
+                    contentColor = Color.White,
+                    disabledContainerColor = Color(0xFF4A2A2B),
+                    disabledContentColor = Color(0xFFB98A8A),
+                ),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(64.dp)
+                    .height(60.dp)
                     .testTag("download_button"),
             ) {
                 Icon(painterResource(R.drawable.ic_download), contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Download", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.width(10.dp))
+                Text("DOWNLOAD", fontSize = 18.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
             }
 
-            StatusArea(state, viewModel, context)
+            StatusArea(state, viewModel, onOpenSettings)
 
-            if (state.backendUrl.isBlank()) {
-                Text(
-                    "Setup needed: no download service is configured. Tap the gear icon to add your backend URL.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
+            // Supported apps
+            Text(
+                "Supported apps",
+                color = Color.White,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(horizontalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxWidth()) {
+                Platform.entries.forEach { p ->
+                    PlatformTile(p, selected = state.selectedPlatform == p) { viewModel.selectPlatform(p) }
+                }
             }
+
+            Button(
+                onClick = { openPlatform(context, state.selectedPlatform) },
+                shape = ButtonShape,
+                colors = ButtonDefaults.buttonColors(containerColor = BrandRed, contentColor = Color.White),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .testTag("open_app_button"),
+            ) {
+                Text("OPEN ${state.selectedPlatform.label.uppercase(Locale.ROOT)}", fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp)
+            }
+
             Text(
                 "Only download videos you own or have permission to save.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = TextMuted,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
             )
         }
-    }
-
-    if (showSettings) {
-        SettingsDialog(state, viewModel, onDismiss = { showSettings = false })
     }
 }
 
 @Composable
-private fun StatusArea(state: UiState, viewModel: DownloadViewModel, context: Context) {
+private fun PlatformTile(platform: Platform, selected: Boolean, onClick: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .testTag("platform_${platform.name}")
+            .semantics { this.selected = selected }
+            .clip(RoundedCornerShape(18.dp))
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(6.dp),
+    ) {
+        Box {
+            Box(
+                modifier = Modifier
+                    .size(78.dp)
+                    .border(
+                        BorderStroke(3.dp, if (selected) BrandRed else Color.Transparent),
+                        RoundedCornerShape(22.dp),
+                    )
+                    .padding(5.dp),
+            ) {
+                Image(
+                    painter = painterResource(platform.tileRes),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(16.dp)),
+                )
+            }
+            if (selected) {
+                Image(
+                    painter = painterResource(R.drawable.ic_check_badge),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = 4.dp, y = (-4).dp),
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            platform.label,
+            color = if (selected) Color.White else TextMuted,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            fontSize = 13.sp,
+        )
+    }
+}
+
+@Composable
+private fun PermissionCard(permission: StoragePermissionState) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = CharcoalRaised),
+        border = BorderStroke(1.dp, BrandRed.copy(alpha = 0.6f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("permission_card"),
+    ) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(painterResource(R.drawable.ic_folder), contentDescription = null, tint = BrandRed)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Allow saving videos", color = Color.White, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Let the app access video storage on your phone.",
+                    color = TextMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Button(
+                onClick = permission.request,
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = BrandRed),
+                modifier = Modifier.testTag("home_allow_storage"),
+            ) { Text(if (permission.opensSettings) "SETTINGS" else "ALLOW") }
+        }
+    }
+}
+
+@Composable
+private fun StatusArea(state: UiState, viewModel: DownloadViewModel, onOpenSettings: () -> Unit) {
     val phase = state.phase
     if (phase == Phase.Idle) return
+    val context = LocalContext.current
+    val activity = context.findActivity()
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("status_card"),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = when (phase) {
                 is Phase.NetworkError, is Phase.Failed, is Phase.Unavailable -> MaterialTheme.colorScheme.errorContainer
                 is Phase.Saved -> MaterialTheme.colorScheme.primaryContainer
-                else -> MaterialTheme.colorScheme.surfaceVariant
+                else -> CharcoalRaised
             }
         ),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             when (phase) {
                 Phase.Checking -> Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 3.dp)
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 3.dp, color = BrandRed)
                     Spacer(Modifier.width(12.dp))
                     StatusText("Checking link…")
                 }
@@ -226,30 +352,43 @@ private fun StatusArea(state: UiState, viewModel: DownloadViewModel, context: Co
                         }
                     )
                     if (fraction != null) {
-                        LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
+                        LinearProgressIndicator(progress = { fraction }, color = BrandRed, modifier = Modifier.fillMaxWidth())
                     } else {
-                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        LinearProgressIndicator(color = BrandRed, modifier = Modifier.fillMaxWidth())
                     }
                     OutlinedButton(onClick = viewModel::cancel, modifier = Modifier.testTag("cancel_button")) {
-                        Text("Cancel")
+                        Text("Cancel", color = Color.White)
                     }
                 }
 
                 is Phase.Saved -> {
-                    StatusText("Saved to Gallery: Movies/${VideoDownloader.ALBUM}/${phase.fileName}")
+                    StatusText(
+                        if (phase.location == VideoDownloader.DEFAULT_LOCATION) {
+                            "Saved to Gallery: ${phase.location}/${phase.fileName}"
+                        } else {
+                            "Saved to ${phase.location}/${phase.fileName}"
+                        }
+                    )
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Button(onClick = { openVideo(context, phase.uri) }, modifier = Modifier.testTag("open_video_button")) {
-                            Text("Open video")
-                        }
-                        OutlinedButton(onClick = { shareVideo(context, phase.uri) }, modifier = Modifier.testTag("share_button")) {
-                            Text("Share")
-                        }
+                        Button(
+                            onClick = { Ads.showInterstitialThen(activity) { openVideo(context, phase.uri) } },
+                            colors = ButtonDefaults.buttonColors(containerColor = BrandRed),
+                            modifier = Modifier.testTag("open_video_button"),
+                        ) { Text("Open video") }
+                        OutlinedButton(
+                            onClick = { Ads.showInterstitialThen(activity) { shareVideo(context, phase.uri) } },
+                            modifier = Modifier.testTag("share_button"),
+                        ) { Text("Share", color = Color.White) }
                     }
                 }
 
                 is Phase.NetworkError -> {
                     StatusText(phase.message)
-                    Button(onClick = viewModel::retry, modifier = Modifier.testTag("retry_button")) { Text("Retry") }
+                    Button(
+                        onClick = viewModel::retry,
+                        colors = ButtonDefaults.buttonColors(containerColor = BrandRed),
+                        modifier = Modifier.testTag("retry_button"),
+                    ) { Text("Retry") }
                 }
 
                 is Phase.Unavailable -> {
@@ -257,7 +396,7 @@ private fun StatusArea(state: UiState, viewModel: DownloadViewModel, context: Co
                     OutlinedButton(
                         onClick = { openUrl(context, phase.originalUrl) },
                         modifier = Modifier.testTag("open_original_button"),
-                    ) { Text("Open original post") }
+                    ) { Text("Open original post", color = Color.White) }
                 }
 
                 is Phase.AuthRequired -> {
@@ -266,18 +405,27 @@ private fun StatusArea(state: UiState, viewModel: DownloadViewModel, context: Co
                         Button(
                             onClick = {
                                 val url = viewModel.authStartUrl(phase.platform, phase.authUrl)
-                                if (url != null) openUrl(context, url) else toast(context, "Set the backend URL first")
+                                if (url != null) openUrl(context, url) else onOpenSettings()
                             },
+                            colors = ButtonDefaults.buttonColors(containerColor = BrandRed),
                             modifier = Modifier.testTag("connect_button"),
                         ) { Text("Connect ${phase.platform.label}") }
                         OutlinedButton(
                             onClick = { openUrl(context, phase.originalUrl) },
                             modifier = Modifier.testTag("open_original_button"),
-                        ) { Text("Open original post") }
+                        ) { Text("Open post", color = Color.White) }
                     }
                 }
 
-                is Phase.Failed -> StatusText(phase.message)
+                is Phase.Failed -> {
+                    StatusText(phase.message)
+                    if (phase.openSettings) {
+                        OutlinedButton(onClick = onOpenSettings, modifier = Modifier.testTag("open_settings_button")) {
+                            Text("Open settings", color = Color.White)
+                        }
+                    }
+                }
+
                 Phase.Cancelled -> StatusText("Download cancelled.")
                 Phase.Idle -> Unit
             }
@@ -287,59 +435,7 @@ private fun StatusArea(state: UiState, viewModel: DownloadViewModel, context: Co
 
 @Composable
 private fun StatusText(text: String) {
-    Text(text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.testTag("status_text"))
-}
-
-@Composable
-private fun SettingsDialog(state: UiState, viewModel: DownloadViewModel, onDismiss: () -> Unit) {
-    val context = LocalContext.current
-    var url by remember { mutableStateOf(state.backendUrl) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Settings") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = url,
-                    onValueChange = { url = it },
-                    label = { Text("Backend URL") },
-                    placeholder = { Text("https://your-backend.example.com") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("backend_url_field"),
-                )
-                HorizontalDivider()
-                Text("Connected accounts", fontWeight = FontWeight.SemiBold)
-                Text(
-                    "Instagram and Facebook downloads work for videos in accounts or Pages you connect.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                listOf(Platform.INSTAGRAM, Platform.FACEBOOK).forEach { p ->
-                    val connected = p.apiName in state.connected
-                    OutlinedButton(
-                        onClick = {
-                            viewModel.saveBackendUrl(url)
-                            val start = viewModel.authStartUrl(p)
-                            if (start != null) openUrl(context, start) else toast(context, "Enter the backend URL first")
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text(if (connected) "${p.label}: connected (reconnect)" else "Connect ${p.label}") }
-                }
-                if (state.connected.isNotEmpty()) {
-                    TextButton(onClick = viewModel::disconnectAll) { Text("Disconnect all accounts") }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                viewModel.saveBackendUrl(url)
-                onDismiss()
-            }, modifier = Modifier.testTag("settings_save")) { Text("Save") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
-    )
+    Text(text, color = Color.White, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.testTag("status_text"))
 }
 
 private fun placeholderFor(p: Platform) = when (p) {
@@ -353,33 +449,4 @@ private fun formatBytes(bytes: Long): String {
     val kb = bytes / 1024.0
     if (kb < 1024) return String.format(Locale.US, "%.0f KB", kb)
     return String.format(Locale.US, "%.1f MB", kb / 1024.0)
-}
-
-private fun toast(context: Context, msg: String) = Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-
-private fun openUrl(context: Context, url: String) {
-    try {
-        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    } catch (e: ActivityNotFoundException) {
-        toast(context, "No app can open this link")
-    }
-}
-
-private fun openVideo(context: Context, uri: Uri) {
-    val intent = Intent(Intent.ACTION_VIEW)
-        .setDataAndType(uri, "video/*")
-        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-    try {
-        context.startActivity(intent)
-    } catch (e: ActivityNotFoundException) {
-        toast(context, "No video player found")
-    }
-}
-
-private fun shareVideo(context: Context, uri: Uri) {
-    val send = Intent(Intent.ACTION_SEND)
-        .setType("video/mp4")
-        .putExtra(Intent.EXTRA_STREAM, uri)
-        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    context.startActivity(Intent.createChooser(send, "Share video").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 }

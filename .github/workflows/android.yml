@@ -50,7 +50,13 @@ jobs:
         run: node backend/scripts/live-check.mjs | tee live-checks.txt
 
       - name: Unit tests and build debug APK
-        run: ./gradlew --stacktrace testDebugUnitTest assembleDebug assembleDebugAndroidTest -PbackendUrl="${BACKEND_URL}" 2>&1 | tee build-log.txt; exit ${PIPESTATUS[0]}
+        run: |
+          set +e
+          echo "::add-matcher::.github/kotlin-problem-matcher.json"
+          ./gradlew --stacktrace testDebugUnitTest assembleDebug assembleDebugAndroidTest -PbackendUrl="${BACKEND_URL}" 2>&1 | tee build-log.txt
+          status=${PIPESTATUS[0]}
+          if [ $status -ne 0 ]; then grep -A3 "What went wrong" build-log.txt | head -12 | while IFS= read -r l; do [ -n "$l" ] && echo "::error title=Gradle::$l"; done; fi
+          exit $status
 
       - name: Stage APK
         run: |
@@ -80,9 +86,14 @@ jobs:
       - name: Test report
         if: always()
         run: |
+          set +e
           python3 .github/scripts/test_report.py test-report.md || true
           if [ -f svd-test-logcat.txt ]; then { echo; echo '## Emulator log (SVD-TEST)'; echo '```'; tail -n 60 svd-test-logcat.txt; echo '```'; } >> test-report.md; fi
           cat test-report.md >> "$GITHUB_STEP_SUMMARY"
+          grep -E "\| PASS \|" test-report.md | sed -E 's/^\| `([^`]+)`.*/\1/' | tr '\n' ' ' | sed 's/^/::notice title=Passed tests::/'; echo
+          grep -E "FAIL" test-report.md | head -10 | while IFS= read -r l; do echo "::error title=Test failure::$l"; done
+          echo "::notice title=Result::$(grep 'Overall' test-report.md | tr -d '*')"
+          if [ -f emulator-failed ]; then grep -E "FAILED|Exception|Error:" emulator-log.txt | head -8 | while IFS= read -r l; do echo "::error title=Emulator::$l"; done; fi
           (cd screenshots 2>/dev/null && find . -name '*.png' | head -20 | xargs -r zip -j ../test-screenshots.zip) || true
           tail -n 200 build-log.txt > build-log-tail.txt 2>/dev/null || true
           tail -n 200 emulator-log.txt > emulator-log-tail.txt 2>/dev/null || true

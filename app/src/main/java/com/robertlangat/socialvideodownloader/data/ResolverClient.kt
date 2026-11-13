@@ -54,7 +54,7 @@ class ResolverClient(
         val base = settings.backendUrl
         if (base.isBlank()) {
             throw ConfigurationException(
-                "No download service is configured. Open Settings (gear icon) and enter your backend URL."
+                "Downloads aren't set up yet. Open Settings → Advanced and add the download service address."
             )
         }
         val body = JSONObject()

@@ -1,0 +1,7 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="72dp" android:height="72dp" android:viewportWidth="72" android:viewportHeight="72">
+    <path android:fillColor="#2F6FED" android:pathData="M16,0h40a16,16 0,0 1,16 16v40a16,16 0,0 1,-16 16h-40a16,16 0,0 1,-16 -16v-40a16,16 0,0 1,16 -16z" />
+    <!-- two people -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M28,22a7,7 0,1 1,0 14a7,7 0,1 1,0 -14zM15,52c0,-8 6,-13 13,-13s13,5 13,13zM46,26a5.5,5.5 0,1 1,0 11a5.5,5.5 0,1 1,0 -11zM43.5,40.5c1,-0.3 1.7,-0.5 2.5,-0.5c6,0 11,4 11,12h-12.5c0,-4.5 -0.4,-8.5 -1,-11.5z" />
+</vector>

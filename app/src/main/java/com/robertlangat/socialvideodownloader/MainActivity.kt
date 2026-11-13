@@ -6,8 +6,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import com.robertlangat.socialvideodownloader.ads.Ads
 import com.robertlangat.socialvideodownloader.ui.DownloadViewModel
 import com.robertlangat.socialvideodownloader.ui.HomeScreen
+import com.robertlangat.socialvideodownloader.ui.SettingsScreen
 import com.robertlangat.socialvideodownloader.ui.theme.SocialVideoDownloaderTheme
 
 class MainActivity : ComponentActivity() {
@@ -20,9 +26,15 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) handleIntent(intent)
         setContent {
             SocialVideoDownloaderTheme {
-                HomeScreen(viewModel)
+                var showSettings by rememberSaveable { mutableStateOf(false) }
+                if (showSettings) {
+                    SettingsScreen(viewModel, onBack = { showSettings = false })
+                } else {
+                    HomeScreen(viewModel, onOpenSettings = { showSettings = true })
+                }
             }
         }
+        Ads.gatherConsentAndInit(this)
     }
 
     override fun onNewIntent(intent: Intent) {

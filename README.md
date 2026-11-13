@@ -7,17 +7,42 @@ Native Android app (Kotlin · Jetpack Compose · Material 3) for saving **videos
 
 ## What the app does
 
-Home screen, top to bottom:
+The app uses a dark theme with red accents. The home screen has:
 
-1. **TikTok / Instagram / Facebook** buttons. The selected one is highlighted. Pasting a supported link selects the matching platform automatically.
-2. **Paste video link** field with a **Paste** shortcut. You can also share a link from the TikTok, Instagram or Facebook app straight into Social Video Downloader.
-3. A large **Download** button. It is enabled only when the field holds a valid video link from a supported platform. One tap checks the link and starts the download as soon as the video is available.
+- **Storage card:** an "Allow saving videos" card with an **ALLOW** button, shown until you grant the storage permission.
+- **Link field:** a white **Paste video link** field with a red Paste shortcut. You can also share a link from the TikTok, Instagram or Facebook app straight into Social Video Downloader.
+- **DOWNLOAD button:** large and red. It is enabled only for a valid video link from a supported platform. One tap checks the link and downloads the video as soon as it is available.
+- **Supported apps:** TikTok, Instagram and Facebook tiles. The selected app is ringed in red and gets a check badge. Pasting a link selects the matching app automatically. The tiles use the app's own original icons, not the platforms' official logos.
+- **OPEN button:** opens the selected app, or its website if the app isn't installed.
+- **Banner ad:** an AdMob banner at the bottom.
 
 While it works, the app shows **Checking link…**, then download progress with a **Cancel** button.
 
 - **Network failure or interrupted download:** the app shows **Retry**, and the partial file is deleted.
 - **Private, removed, not yours, or not downloadable:** the app explains why and offers **Open original post**.
-- **Download finished:** the video is saved with Android MediaStore to `Movies/SocialVideoDownloader`, so it appears in Gallery and Google Photos. The app then shows **Open video** and **Share**.
+- **Download finished:** the app shows **Open video** and **Share**. An interstitial ad may appear before the video opens, at most once every 2 minutes.
+
+**Settings** (gear icon):
+
+- **Storage:**
+  - the storage permission status, with an **Allow** button;
+  - the **Save folder** (default `Movies/SocialVideoDownloader`, which appears in Gallery), with **Choose folder** to pick any other folder on the phone and **Use default** to switch back.
+- **Connected accounts:** Connect Instagram or Facebook.
+- **Ads & privacy:** a **Privacy options** button, shown where consent rules apply.
+- **Advanced** (collapsed): the download service address.
+
+## Ads (AdMob)
+
+| | ID |
+|---|---|
+| App ID | `ca-app-pub-8306955081407788~3472373851` |
+| Banner (anchored adaptive, bottom of home screen) | `ca-app-pub-8306955081407788/6453760418` |
+| Interstitial (after a finished download, on Open video or Share) | `ca-app-pub-8306955081407788/4964263977` |
+
+- **Consent:** Google's User Messaging Platform asks for consent where the law requires it (EEA, UK, Switzerland) before any ad loads.
+- **Test ads:** build with `./gradlew assembleDebug -PuseTestAds=true` to use Google's sample ad units while developing.
+- **Live ads on your own phone:** don't tap your own live ads. AdMob can suspend accounts for invalid clicks.
+- **New apps:** live ads may not fill until the app is set up and reviewed in AdMob.
 
 ## How downloads are authorised
 
@@ -52,7 +77,7 @@ The secrets stay on the backend and never ship in the APK.
 
    Check that it's running: `GET /health` should return `{"ok":true,...}`.
 3. **Point the app at the backend.** Either:
-   - in the app, tap ⚙ → **Backend URL** → Save, then **Connect Instagram** or **Connect Facebook**; or
+   - in the app, tap ⚙ → **Advanced** → **Download service address** → Save, then **Connect Instagram** or **Connect Facebook**; or
    - bake the URL into the APK: run `./gradlew assembleDebug -PbackendUrl=https://YOUR-BACKEND`, or set the repository variable `BACKEND_URL` so CI builds include it.
 
 ### Backend API

@@ -17,6 +17,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -28,6 +29,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.robertlangat.socialvideodownloader.ads.Ads
 import com.robertlangat.socialvideodownloader.data.Settings
 import com.robertlangat.socialvideodownloader.data.VideoDownloader
 import okhttp3.mockwebserver.Dispatcher
@@ -81,6 +83,7 @@ class DownloadFlowTest {
         }
         server.start(InetAddress.getByName("127.0.0.1"), 0)
 
+        Ads.disabled = true // full-screen ads must not cover the UI under test
         Settings(context).apply {
             clear()
             backendUrl = server.url("/").toString()
@@ -284,6 +287,36 @@ class DownloadFlowTest {
         compose.waitForIdle()
         assertSelected("platform_FACEBOOK")
         compose.onNodeWithTag("download_button").assertIsEnabled()
+    }
+
+    @Test
+    fun home_showsSupportedAppsAndPermissionButton_tapSelectsPlatform() {
+        compose.onNodeWithTag("permission_card").assertExists()
+        compose.onNodeWithTag("home_allow_storage").assertExists()
+        compose.onNodeWithTag("open_app_button").assertExists()
+        assertSelected("platform_TIKTOK")
+        compose.onNodeWithTag("platform_INSTAGRAM").performClick()
+        compose.waitForIdle()
+        assertSelected("platform_INSTAGRAM")
+        screenshot("home_idle")
+    }
+
+    @Test
+    fun settings_showsStorageFolderAndHidesServiceUrlUnderAdvanced() {
+        compose.onNodeWithTag("settings_button").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("settings_screen").assertExists()
+        compose.onNodeWithTag("allow_storage_button").assertExists()
+        compose.onNodeWithTag("choose_folder_button").assertExists()
+        compose.onNodeWithTag("save_folder_label").assertTextContains("Movies/SocialVideoDownloader")
+        compose.onNodeWithTag("backend_url_field").assertDoesNotExist()
+        screenshot("settings")
+        compose.onNodeWithTag("advanced_toggle").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("backend_url_field").assertExists()
+        compose.onNodeWithTag("settings_back").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("download_button").assertExists()
     }
 
     @Test

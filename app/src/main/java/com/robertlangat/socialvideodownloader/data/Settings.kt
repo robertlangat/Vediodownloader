@@ -28,6 +28,13 @@ class Settings(context: Context) {
             prefs.edit().putStringSet(KEY_CONNECTED, value).apply()
         }
 
+    /** SAF tree URI of a user-chosen save folder, or null for the default Movies/SocialVideoDownloader. */
+    var saveTreeUri: String?
+        get() = prefs.getString(KEY_SAVE_TREE, null)
+        set(value) {
+            prefs.edit().putString(KEY_SAVE_TREE, value).apply()
+        }
+
     fun clear() {
         prefs.edit().clear().commit()
     }
@@ -37,5 +44,6 @@ class Settings(context: Context) {
         const val KEY_BACKEND_URL = "backend_url"
         const val KEY_SESSION = "session_token"
         const val KEY_CONNECTED = "connected_platforms"
+        const val KEY_SAVE_TREE = "save_tree_uri"
     }
 }

@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
 import android.os.Environment
+import android.provider.DocumentsContract
 import android.provider.MediaStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
@@ -16,10 +17,13 @@ import okhttp3.Request
 import okhttp3.Response
 import java.io.IOException
 
+/** The user-chosen SAF folder can no longer be written. */
+class FolderAccessException(message: String) : Exception(message)
+
 /** The file URL answered 403/404/410: the video is gone or the link expired. */
 class DownloadUnavailableException(message: String) : Exception(message)
 
-data class SavedVideo(val uri: Uri, val displayName: String)
+data class SavedVideo(val uri: Uri, val displayName: String, val location: String)
 
 /**
  * Streams a video into the shared Movies/SocialVideoDownloader collection with MediaStore,
@@ -34,6 +38,7 @@ class VideoDownloader(
         url: String,
         displayName: String,
         mimeType: String,
+        folder: Uri? = null,
         onProgress: (downloaded: Long, total: Long) -> Unit,
     ): SavedVideo = withContext(Dispatchers.IO) {
         val request = Request.Builder().url(url).get().build()
@@ -53,7 +58,7 @@ class VideoDownloader(
                 ensureActive()
                 throw RetryableException("The download couldn't start. Check your connection and try again.", e)
             }
-            response.use { resp -> saveBody(resp, displayName, mimeType, onProgress) }
+            response.use { resp -> saveBody(resp, displayName, mimeType, folder, onProgress) }
         } finally {
             watcher.cancel()
         }
@@ -63,6 +68,7 @@ class VideoDownloader(
         resp: Response,
         displayName: String,
         mimeType: String,
+        folder: Uri?,
         onProgress: (downloaded: Long, total: Long) -> Unit,
     ): SavedVideo {
         when {
@@ -78,15 +84,29 @@ class VideoDownloader(
         val total = body.contentLength()
 
         val resolver = context.contentResolver
-        val values = ContentValues().apply {
-            put(MediaStore.Video.Media.DISPLAY_NAME, displayName)
-            put(MediaStore.Video.Media.MIME_TYPE, mimeType)
-            put(MediaStore.Video.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MOVIES}/$ALBUM")
-            put(MediaStore.Video.Media.IS_PENDING, 1)
+        val useMediaStore = folder == null
+        val itemUri: Uri
+        if (useMediaStore) {
+            val values = ContentValues().apply {
+                put(MediaStore.Video.Media.DISPLAY_NAME, displayName)
+                put(MediaStore.Video.Media.MIME_TYPE, mimeType)
+                put(MediaStore.Video.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MOVIES}/$ALBUM")
+                put(MediaStore.Video.Media.IS_PENDING, 1)
+            }
+            val collection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            itemUri = resolver.insert(collection, values)
+                ?: throw IOException("Couldn't create the video file on this phone (is storage full?).")
+        } else {
+            itemUri = try {
+                val tree: Uri = folder!!
+                val parent = DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
+                DocumentsContract.createDocument(resolver, parent, mimeType, displayName)
+            } catch (e: Exception) {
+                null
+            } ?: throw FolderAccessException(
+                "Couldn't write to the chosen save folder. Choose the folder again in Settings, or switch back to the default folder."
+            )
         }
-        val collection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-        val itemUri = resolver.insert(collection, values)
-            ?: throw IOException("Couldn't create the video file on this phone (is storage full?).")
 
         var completed = false
         try {
@@ -126,14 +146,18 @@ class VideoDownloader(
             }
             onProgress(downloaded, if (total > 0) total else downloaded)
 
-            val done = ContentValues().apply { put(MediaStore.Video.Media.IS_PENDING, 0) }
-            resolver.update(itemUri, done, null, null)
+            if (useMediaStore) {
+                val done = ContentValues().apply { put(MediaStore.Video.Media.IS_PENDING, 0) }
+                resolver.update(itemUri, done, null, null)
+            }
             completed = true
-            return SavedVideo(itemUri, displayName)
+            val location = if (useMediaStore) "${Environment.DIRECTORY_MOVIES}/$ALBUM" else folderLabel(folder!!)
+            return SavedVideo(itemUri, displayName, location)
         } finally {
             if (!completed) {
                 try {
-                    resolver.delete(itemUri, null, null)
+                    if (useMediaStore) resolver.delete(itemUri, null, null)
+                    else DocumentsContract.deleteDocument(resolver, itemUri)
                 } catch (_: Exception) {
                 }
             }
@@ -142,6 +166,18 @@ class VideoDownloader(
 
     companion object {
         const val ALBUM = "SocialVideoDownloader"
+        const val DEFAULT_LOCATION = "Movies/SocialVideoDownloader"
+
+        /** "primary:Download/Videos" -> "Phone storage/Download/Videos" */
+        fun folderLabel(tree: Uri): String = try {
+            val id = DocumentsContract.getTreeDocumentId(tree)
+            val volume = id.substringBefore(':')
+            val path = id.substringAfter(':', "")
+            val root = if (volume == "primary") "Phone storage" else "SD card"
+            if (path.isBlank()) root else "$root/$path"
+        } catch (e: Exception) {
+            "Chosen folder"
+        }
 
         fun buildFileName(suggested: String?, platform: Platform, now: Long = System.currentTimeMillis()): String {
             val base = suggested

@@ -6,6 +6,12 @@ plugins {
 
 val backendUrl: String = (project.findProperty("backendUrl") as String?)?.trim().orEmpty()
 
+// AdMob. Pass -PuseTestAds=true to build with Google's sample ad units instead of the live ones.
+val useTestAds: Boolean = (project.findProperty("useTestAds") as String?)?.toBoolean() ?: false
+val admobAppId = if (useTestAds) "ca-app-pub-3940256099942544~3347511713" else "ca-app-pub-8306955081407788~3472373851"
+val admobBannerId = if (useTestAds) "ca-app-pub-3940256099942544/9214589741" else "ca-app-pub-8306955081407788/6453760418"
+val admobInterstitialId = if (useTestAds) "ca-app-pub-3940256099942544/1033173712" else "ca-app-pub-8306955081407788/4964263977"
+
 android {
     namespace = "com.robertlangat.socialvideodownloader"
     compileSdk = 35
@@ -14,11 +20,14 @@ android {
         applicationId = "com.robertlangat.socialvideodownloader"
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0-test"
+        versionCode = 2
+        versionName = "0.2.0-test"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "BACKEND_URL", "\"$backendUrl\"")
+        buildConfigField("String", "ADMOB_BANNER_ID", "\"$admobBannerId\"")
+        buildConfigField("String", "ADMOB_INTERSTITIAL_ID", "\"$admobInterstitialId\"")
+        manifestPlaceholders["admobAppId"] = admobAppId
     }
 
     signingConfigs {
@@ -77,6 +86,8 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.okhttp)
+    implementation(libs.play.services.ads)
+    implementation(libs.ump)
 
     testImplementation(libs.junit)
     testImplementation(libs.json)

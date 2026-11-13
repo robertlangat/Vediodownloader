@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.robertlangat.socialvideodownloader.SvdApp
 import com.robertlangat.socialvideodownloader.data.ConfigurationException
 import com.robertlangat.socialvideodownloader.data.DownloadUnavailableException
+import com.robertlangat.socialvideodownloader.data.FolderAccessException
 import com.robertlangat.socialvideodownloader.data.LinkParser
 import com.robertlangat.socialvideodownloader.data.ParsedLink
 import com.robertlangat.socialvideodownloader.data.Platform
@@ -26,7 +27,7 @@ sealed interface Phase {
     data object Idle : Phase
     data object Checking : Phase
     data class Downloading(val downloaded: Long, val total: Long) : Phase
-    data class Saved(val uri: Uri, val fileName: String) : Phase
+    data class Saved(val uri: Uri, val fileName: String, val location: String) : Phase
     data class NetworkError(val message: String) : Phase
     data class Unavailable(val message: String, val originalUrl: String) : Phase
     data class AuthRequired(
@@ -47,6 +48,8 @@ data class UiState(
     val phase: Phase = Phase.Idle,
     val backendUrl: String = "",
     val connected: Set<String> = emptySet(),
+    val saveFolderLabel: String = VideoDownloader.DEFAULT_LOCATION,
+    val customFolder: Boolean = false,
 ) {
     val isBusy: Boolean get() = phase is Phase.Checking || phase is Phase.Downloading
     val canDownload: Boolean get() = detected != null && !isBusy
@@ -59,7 +62,12 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
     private val settings = container.settings
 
     private val _state = MutableStateFlow(
-        UiState(backendUrl = settings.backendUrl, connected = settings.connectedPlatforms)
+        UiState(
+            backendUrl = settings.backendUrl,
+            connected = settings.connectedPlatforms,
+            saveFolderLabel = folderLabel(settings.saveTreeUri),
+            customFolder = settings.saveTreeUri != null,
+        )
     )
     val state: StateFlow<UiState> = _state.asStateFlow()
 
@@ -116,6 +124,8 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
                 _state.update { it.copy(phase = Phase.NetworkError(e.message ?: "Network error.")) }
             } catch (e: DownloadUnavailableException) {
                 _state.update { it.copy(phase = Phase.Unavailable(e.message ?: "Unavailable.", link.url)) }
+            } catch (e: FolderAccessException) {
+                _state.update { it.copy(phase = Phase.Failed(e.message ?: "Can't write to the save folder.", openSettings = true)) }
             } catch (e: ConfigurationException) {
                 _state.update { it.copy(phase = Phase.Failed(e.message ?: "Not configured.", openSettings = true)) }
             } catch (e: IOException) {
@@ -130,12 +140,13 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(phase = Phase.Downloading(0, -1)) }
         val name = VideoDownloader.buildFileName(ready.fileName ?: ready.title, link.platform)
         val mime = ready.mimeType?.takeIf { it.startsWith("video/") } ?: "video/mp4"
-        val saved = container.downloader.download(ready.downloadUrl, name, mime) { done, total ->
+        val folder = settings.saveTreeUri?.let { Uri.parse(it) }
+        val saved = container.downloader.download(ready.downloadUrl, name, mime, folder) { done, total ->
             _state.update { s ->
                 if (s.phase is Phase.Downloading) s.copy(phase = Phase.Downloading(done, total)) else s
             }
         }
-        _state.update { it.copy(phase = Phase.Saved(saved.uri, saved.displayName)) }
+        _state.update { it.copy(phase = Phase.Saved(saved.uri, saved.displayName, saved.location)) }
     }
 
     fun cancel() {
@@ -177,6 +188,15 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
         // Resume the download the user was trying to make before connecting.
         if (_state.value.phase is Phase.AuthRequired && _state.value.detected != null) startDownload()
     }
+
+    /** null = default Movies/SocialVideoDownloader (Gallery) folder. */
+    fun setSaveFolder(tree: Uri?) {
+        settings.saveTreeUri = tree?.toString()
+        _state.update { it.copy(saveFolderLabel = folderLabel(settings.saveTreeUri), customFolder = tree != null) }
+    }
+
+    private fun folderLabel(tree: String?): String =
+        tree?.let { VideoDownloader.folderLabel(Uri.parse(it)) } ?: VideoDownloader.DEFAULT_LOCATION
 
     fun disconnectAll() {
         settings.sessionToken = null
