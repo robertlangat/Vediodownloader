@@ -74,6 +74,7 @@ class DownloadFlowTest {
     }
     private val runId = System.currentTimeMillis()
     private val pageLoads = AtomicInteger(0)
+    @Volatile private var mediaUrls: Map<String, String> = emptyMap()
     private val breakNextDownload = AtomicBoolean(false)
 
     @Before
@@ -83,6 +84,8 @@ class DownloadFlowTest {
             override fun dispatch(request: RecordedRequest): MockResponse = route(request)
         }
         server.start(InetAddress.getByName("127.0.0.1"), 0)
+        // Resolve the URLs here: MockWebServer.url() does a host lookup, which Android forbids on the main thread.
+        mediaUrls = listOf("ok", "slow", "broken").associateWith { server.url("/media/$it.mp4").toString() }
 
         Ads.disabled = true // full-screen ads must not cover the UI under test
         Settings(context).clear()
@@ -107,7 +110,7 @@ class DownloadFlowTest {
             url.contains("SLOW") || url.contains("5555555555") -> "slow"
             else -> "ok"
         }
-        val mediaUrl = server.url("/media/$media.mp4").toString()
+        val mediaUrl = mediaUrls.getValue(media)
         val slashEscaped = mediaUrl.replace("/", "\\/")
         val html = when {
             url.contains("LOGINWALL") ->
