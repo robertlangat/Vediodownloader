@@ -30,7 +30,7 @@ class LiveExtractionTest {
 
     @Test
     fun liveExtraction_report() {
-        PageUrls.rewrite = null
+        PageUrls.fake = null
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val extractor = WebVideoExtractor(context)
         val http = OkHttpClient.Builder().readTimeout(20, TimeUnit.SECONDS).build()

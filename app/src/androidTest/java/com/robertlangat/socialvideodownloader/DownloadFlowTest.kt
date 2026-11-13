@@ -56,7 +56,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * End-to-end tests of the paste -> check -> download -> save-to-Gallery flow.
  *
  * A MockWebServer on the device plays both roles that exist in production:
- *  - the TikTok / Instagram / Facebook post pages (GET /page), with the same JSON the real pages embed, and
+ *  - (via PageUrls.fake) the TikTok / Instagram / Facebook post pages, with the same JSON the real pages embed, and
  *  - the platform CDN that serves the authorised video file (GET /media/...).
  * The served file is a real H.264/AAC MP4 (androidTest/assets/sample.mp4).
  */
@@ -87,7 +87,7 @@ class DownloadFlowTest {
         Ads.disabled = true // full-screen ads must not cover the UI under test
         Settings(context).clear()
         // Serve "post pages" from the local server instead of the real sites.
-        PageUrls.rewrite = { u -> server.url("/page").newBuilder().addQueryParameter("u", u).build().toString() }
+        PageUrls.fake = { u -> fakePage(u) }
         scenario = ActivityScenario.launch(MainActivity::class.java)
         compose.waitForIdle()
     }
@@ -95,42 +95,38 @@ class DownloadFlowTest {
     @After
     fun tearDown() {
         scenario.close()
-        PageUrls.rewrite = null
+        PageUrls.fake = null
         server.shutdown()
+    }
+
+    /** The post page the app's hidden browser "loads" for [url], with the same data fields the real sites embed. */
+    private fun fakePage(url: String): PageUrls.FakePage {
+        pageLoads.incrementAndGet()
+        val media = when {
+            breakNextDownload.getAndSet(false) -> "broken"
+            url.contains("SLOW") || url.contains("5555555555") -> "slow"
+            else -> "ok"
+        }
+        val mediaUrl = server.url("/media/$media.mp4").toString()
+        val slashEscaped = mediaUrl.replace("/", "\\/")
+        val html = when {
+            url.contains("LOGINWALL") ->
+                return PageUrls.FakePage("https://www.instagram.com/accounts/login/?next=%2Freel%2F", "<html><body>Log in</body></html>")
+            url.contains("9999999999") ->
+                """<html><body><script type="application/json">{"webapp.video-detail":{"statusCode":10204,"statusMsg":"item doesn't exist"}}</script></body></html>"""
+            url.contains("tiktok") ->
+                """<html><body><script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application/json">{"__DEFAULT_SCOPE__":{"webapp.video-detail":{"itemInfo":{"itemStruct":{"video":{"playAddr":"${mediaUrl.replace("/", "\\u002F")}"}}}}}}</script></body></html>"""
+            url.contains("instagram") ->
+                """<html><body><script type="application/json">{"items":[{"video_versions":[{"type":101,"url":"$slashEscaped"}]}]}</script></body></html>"""
+            else ->
+                """<html><body><script type="application/json">{"video":{"browser_native_sd_url":"$slashEscaped","browser_native_hd_url":"$slashEscaped"}}</script></body></html>"""
+        }
+        return PageUrls.FakePage(url, html)
     }
 
     private fun route(request: RecordedRequest): MockResponse {
         val path = request.path ?: ""
         return when {
-            path.startsWith("/page") -> {
-                pageLoads.incrementAndGet()
-                val url = request.requestUrl?.queryParameter("u").orEmpty()
-                val media = when {
-                    breakNextDownload.getAndSet(false) -> "broken"
-                    url.contains("SLOW") || url.contains("5555555555") -> "slow"
-                    else -> "ok"
-                }
-                val mediaUrl = server.url("/media/$media.mp4").toString()
-                val slashEscaped = mediaUrl.replace("/", "\\/")
-                val body = when {
-                    url.contains("LOGINWALL") ->
-                        return MockResponse().setResponseCode(302).setHeader("Location", "/accounts/login/?next=%2Freel%2F")
-                    url.contains("9999999999") ->
-                        """<html><body><script type="application/json">{"webapp.video-detail":{"statusCode":10204,"statusMsg":"item doesn't exist"}}</script></body></html>"""
-                    url.contains("tiktok") ->
-                        """<html><body><script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application/json">{"__DEFAULT_SCOPE__":{"webapp.video-detail":{"itemInfo":{"itemStruct":{"video":{"playAddr":"${mediaUrl.replace("/", "\\u002F")}"}}}}}}</script></body></html>"""
-                    url.contains("instagram") ->
-                        """<html><body><script type="application/json">{"items":[{"video_versions":[{"type":101,"url":"$slashEscaped"}]}]}</script></body></html>"""
-                    else ->
-                        """<html><body><script type="application/json">{"video":{"browser_native_sd_url":"$slashEscaped","browser_native_hd_url":"$slashEscaped"}}</script></body></html>"""
-                }
-                MockResponse().setHeader("Content-Type", "text/html; charset=utf-8").setBody(body)
-            }
-
-            path.startsWith("/accounts/login") -> MockResponse()
-                .setHeader("Content-Type", "text/html")
-                .setBody("<html><body>Log in</body></html>")
-
             path.startsWith("/media/ok.mp4") -> MockResponse()
                 .setHeader("Content-Type", "video/mp4")
                 .setBody(Buffer().write(sampleBytes))

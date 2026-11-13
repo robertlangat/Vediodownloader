@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.os.SystemClock
+import android.util.Log
 import android.webkit.CookieManager
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -30,10 +31,12 @@ sealed interface Extraction {
     data class Unavailable(val message: String, val canRetry: Boolean = false) : Extraction
 }
 
-/** Test hook: lets the emulator tests serve post pages from a local server. */
+/** Test hook: lets the emulator tests supply post pages (shown as if loaded from [baseUrl]). */
 object PageUrls {
+    data class FakePage(val baseUrl: String, val html: String)
+
     @Volatile
-    var rewrite: ((String) -> String)? = null
+    var fake: ((String) -> FakePage?)? = null
 }
 
 object UserAgents {
@@ -83,14 +86,19 @@ class WebVideoExtractor(private val context: Context) {
 
     suspend fun extract(link: ParsedLink, timeoutMs: Long = 25_000): Extraction = withContext(Dispatchers.Main) {
         val ua = UserAgents.forPlatform(context, link.platform)
-        val target = PageUrls.rewrite?.invoke(link.url) ?: link.url
+        val fakePage = PageUrls.fake?.invoke(link.url)
+        val target = fakePage?.baseUrl ?: link.url
         val media = CopyOnWriteArrayList<String>()
         var mainFrameError: String? = null
         var mainFrameHttpStatus = 0
 
         val webView = createWebView(ua, media, onError = { mainFrameError = it }, onHttpError = { mainFrameHttpStatus = it })
         try {
-            webView.loadUrl(target)
+            if (fakePage != null) {
+                webView.loadDataWithBaseURL(fakePage.baseUrl, fakePage.html, "text/html", "utf-8", null)
+            } else {
+                webView.loadUrl(target)
+            }
             val deadline = SystemClock.elapsedRealtime() + timeoutMs
             var last: Snapshot? = null
             delay(1200)
@@ -102,6 +110,7 @@ class WebVideoExtractor(private val context: Context) {
                     return@withContext Extraction.Unavailable("This post was removed or the link is broken.")
                 }
                 val snap = snapshot(webView)
+                Log.d(TAG, "poll url=${snap?.url} html=${snap?.html?.length} video=${snap?.videoSrc} media=${media.size}")
                 if (snap != null) {
                     last = snap
                     VideoUrlParser.find(link.platform, snap.html)?.let { return@withContext found(it, snap.url, ua, link.platform) }
@@ -214,6 +223,7 @@ class WebVideoExtractor(private val context: Context) {
     }
 
     companion object {
+        private const val TAG = "SVD-EXTRACT"
         private const val SNAPSHOT_JS = """(function(){
             var v=document.querySelector('video');
             return JSON.stringify({u:location.href, v:v?(v.currentSrc||v.src||''):'', h:document.documentElement.outerHTML});
