@@ -122,6 +122,24 @@ jobs:
           [ -f test-screenshots.zip ] && FILES="$FILES test-screenshots.zip"
           gh release upload "$TAG" $FILES --clobber
 
+      - name: Publish tested APK to the apk-builds branch (direct download link)
+        if: always() && env.IS_TAG != 'true' && github.ref == 'refs/heads/main'
+        run: |
+          set -e
+          if [ -f emulator-failed ] || [ ! -f "dist/${APK_NAME}" ]; then echo "Tests failed or no APK; not publishing."; exit 0; fi
+          VERSION=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          OUT="SocialVideoDownloader-v${VERSION}.apk"
+          mkdir -p /tmp/apkpub && cp "dist/${APK_NAME}" "/tmp/apkpub/${OUT}"
+          cp test-report.md /tmp/apkpub/ 2>/dev/null || true
+          printf '# Latest tested APK\n\nBuilt from %s.\n\nDownload: [%s](https://github.com/%s/raw/apk-builds/%s)\n' "$GITHUB_SHA" "$OUT" "$GITHUB_REPOSITORY" "$OUT" > /tmp/apkpub/README.md
+          cd /tmp/apkpub
+          git init -q -b apk-builds
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A && git commit -q -m "Tested APK ${VERSION} from ${GITHUB_SHA}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" apk-builds
+          echo "::notice title=APK::https://github.com/${GITHUB_REPOSITORY}/raw/apk-builds/${OUT}"
+
       - name: Fail if emulator tests failed
         if: always()
         run: test ! -f emulator-failed
