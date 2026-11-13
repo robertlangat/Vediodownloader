@@ -24,6 +24,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
@@ -311,9 +312,10 @@ class DownloadFlowTest {
         compose.onNodeWithTag("save_folder_label").assertTextContains("Movies/SocialVideoDownloader")
         compose.onNodeWithTag("backend_url_field").assertDoesNotExist()
         screenshot("settings")
-        compose.onNodeWithTag("advanced_toggle").performClick()
+        compose.onNodeWithTag("advanced_toggle").performScrollTo().performClick()
         compose.waitForIdle()
         compose.onNodeWithTag("backend_url_field").assertExists()
+        screenshot("settings_advanced")
         compose.onNodeWithTag("settings_back").performClick()
         compose.waitForIdle()
         compose.onNodeWithTag("download_button").assertExists()
