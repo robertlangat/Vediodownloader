@@ -21,8 +21,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ContentPaste
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -52,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -60,6 +59,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.robertlangat.socialvideodownloader.R
 import com.robertlangat.socialvideodownloader.data.Platform
 import com.robertlangat.socialvideodownloader.data.VideoDownloader
 import java.util.Locale
@@ -144,7 +144,7 @@ fun HomeScreen(viewModel: DownloadViewModel) {
                         },
                         modifier = Modifier.testTag("paste_button"),
                     ) {
-                        Icon(Icons.Filled.ContentPaste, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(painterResource(R.drawable.ic_paste), contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
                         Text("Paste")
                     }
@@ -165,7 +165,7 @@ fun HomeScreen(viewModel: DownloadViewModel) {
                     .height(64.dp)
                     .testTag("download_button"),
             ) {
-                Icon(Icons.Filled.Download, contentDescription = null)
+                Icon(painterResource(R.drawable.ic_download), contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text("Download", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
             }

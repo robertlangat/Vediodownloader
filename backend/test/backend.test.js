@@ -35,7 +35,7 @@ test('parseLink recognises supported links and rejects others', () => {
 });
 
 test('TikTok: public post -> not_downloadable, missing post -> removed', async () => {
-  const ok = fakeFetch([['https://www.tiktok.com/oembed', () => json(200, { title: 't', author_name: 'a' })]]);
+  const ok = fakeFetch([['https://www.tiktok.com/oembed', () => json(200, { title: 't', author_name: 'a', html: '<blockquote>' })]]);
   const r1 = await resolveTikTok(parseLink('https://www.tiktok.com/@a/video/6718335390845095173'), { fetchImpl: ok });
   assert.equal(r1.status, 'unavailable');
   assert.equal(r1.reason, 'not_downloadable');
@@ -44,6 +44,10 @@ test('TikTok: public post -> not_downloadable, missing post -> removed', async (
   const gone = fakeFetch([['https://www.tiktok.com/oembed', () => json(400, { code: 400 })]]);
   const r2 = await resolveTikTok(parseLink('https://www.tiktok.com/@a/video/6718335390845095173'), { fetchImpl: gone });
   assert.equal(r2.reason, 'removed');
+
+  const errBody = fakeFetch([['https://www.tiktok.com/oembed', () => json(200, { code: 400, message: 'Something went wrong' })]]);
+  const r3 = await resolveTikTok(parseLink('https://www.tiktok.com/@a/video/1000000000000000001'), { fetchImpl: errBody });
+  assert.equal(r3.reason, 'removed');
 });
 
 const igSession = { instagram: { accessToken: 'IGTOKEN', username: 'me' } };

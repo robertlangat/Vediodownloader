@@ -9,6 +9,9 @@ const cases = [
 ];
 for (const [label, url] of cases) {
   try {
+    const raw = await fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`);
+    const text = await raw.text();
+    console.log(`${label}: oEmbed HTTP ${raw.status} body=${text.slice(0, 160).replace(/\s+/g, ' ')}`);
     const r = await resolveTikTok(parseLink(url), { fetchImpl: fetch });
     console.log(`${label}: status=${r.status} reason=${r.reason || '-'}`);
   } catch (e) {
