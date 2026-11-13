@@ -53,14 +53,14 @@ export async function resolveTikTok(link, { fetchImpl }) {
   // oEmbed can answer 200 with an error body for missing/private posts, so check the payload too.
   const body = await res.json().catch(() => null);
   const failed = !body || (body.code !== undefined && body.code !== 0) || (body.status_code !== undefined && body.status_code !== 0);
-  // A generic player iframe is returned even for unknown ids; real posts carry author/title metadata.
-  if (failed || !(body.author_name || body.author_unique_id || body.title)) {
-    return unavailable('removed', 'This TikTok post is private, removed or the link is broken.', link.url);
-  }
+  if (failed) return unavailable('removed', 'This TikTok post is private, removed or the link is broken.', link.url);
+  const verified = !!(body.author_name || body.author_unique_id || body.title);
+  // TikTok's official APIs never expose the video file, so TikTok links are always "not_downloadable".
   return unavailable(
     'not_downloadable',
-    "This TikTok post exists, but TikTok's official APIs don't provide video files to other apps. " +
-      "Open the post in TikTok and use Share → Save video (available when the creator allows downloads).",
+    (verified ? 'This TikTok post exists, but ' : '') +
+      "TikTok's official APIs don't provide video files to other apps, so this video can't be downloaded here. " +
+      'Open the post in TikTok and use Share → Save video (available when the creator allows downloads).',
     link.url,
   );
 }
