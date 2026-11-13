@@ -1,0 +1,20 @@
+# One-click deploy of the backend on Render (https://render.com) — "New > Blueprint" and pick this repo.
+services:
+  - type: web
+    name: social-video-downloader-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: "true"
+    startCommand: node src/server.js
+    healthCheckPath: /health
+    envVars:
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: INSTAGRAM_APP_ID
+        sync: false
+      - key: INSTAGRAM_APP_SECRET
+        sync: false
+      - key: FACEBOOK_APP_ID
+        sync: false
+      - key: FACEBOOK_APP_SECRET
+        sync: false
