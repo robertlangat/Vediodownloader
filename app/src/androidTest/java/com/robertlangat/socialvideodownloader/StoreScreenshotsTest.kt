@@ -60,7 +60,11 @@ class StoreScreenshotsTest {
                 val path = request.path ?: ""
                 val r = MockResponse().setHeader("Content-Type", "video/mp4").setBody(Buffer().write(sample))
                 return when {
-                    path.startsWith("/media/slow.mp4") -> r.throttleBody(1024, 400, TimeUnit.MILLISECONDS)
+                    // ~8.6 MB "video" streamed slowly, so the progress screen shows realistic sizes (cancelled before the end)
+                    path.startsWith("/media/slow.mp4") -> MockResponse()
+                        .setHeader("Content-Type", "video/mp4")
+                        .setBody(Buffer().write(ByteArray(9_017_000)))
+                        .throttleBody(256 * 1024, 400, TimeUnit.MILLISECONDS)
                     path.startsWith("/media/ok.mp4") -> r
                     else -> MockResponse().setResponseCode(404)
                 }
@@ -121,7 +125,7 @@ class StoreScreenshotsTest {
         enter("https://www.instagram.com/reel/C7301abcDEF/")
         compose.onNodeWithTag("download_button").performClick()
         waitTag("cancel_button")
-        Thread.sleep(6_000)
+        Thread.sleep(5_500)
         shot("store_2_downloading")
         compose.onNodeWithTag("cancel_button").performClick()
 
