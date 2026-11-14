@@ -116,6 +116,7 @@ jobs:
           OUT="SocialVideoDownloader-v${VERSION}.apk"
           mkdir -p /tmp/apkpub && cp "dist/${APK_NAME}" "/tmp/apkpub/${OUT}"
           cp test-report.md /tmp/apkpub/ 2>/dev/null || true
+          mkdir -p /tmp/apkpub/screenshots && find screenshots -name '*.png' -exec cp {} /tmp/apkpub/screenshots/ \; 2>/dev/null || true
           printf '# Latest tested APK\n\nBuilt from %s.\n\nDownload: [%s](https://github.com/%s/raw/apk-builds/%s)\n' "$GITHUB_SHA" "$OUT" "$GITHUB_REPOSITORY" "$OUT" > /tmp/apkpub/README.md
           cd /tmp/apkpub
           git init -q -b apk-builds
