@@ -36,7 +36,7 @@ jobs:
         run: |
           set +e
           echo "::add-matcher::.github/kotlin-problem-matcher.json"
-          ./gradlew --stacktrace testDebugUnitTest assembleDebug assembleDebugAndroidTest 2>&1 | tee build-log.txt
+          ./gradlew --stacktrace testDebugUnitTest assembleDebug assembleRelease assembleDebugAndroidTest 2>&1 | tee build-log.txt
           status=${PIPESTATUS[0]}
           if [ $status -ne 0 ]; then grep -A3 "What went wrong" build-log.txt | head -12 | while IFS= read -r l; do [ -n "$l" ] && echo "::error title=Gradle::$l"; done; fi
           exit $status
@@ -117,6 +117,13 @@ jobs:
           OUT="SocialVideoDownloader-v${VERSION}.apk"
           mkdir -p /tmp/apkpub && cp "dist/${APK_NAME}" "/tmp/apkpub/${OUT}"
           cp test-report.md /tmp/apkpub/ 2>/dev/null || true
+          # Unsigned release build + Android's signing tools, so the release can be signed with a key kept off GitHub.
+          mkdir -p /tmp/apkpub/release/tools
+          cp app/build/outputs/apk/release/app-release-unsigned.apk "/tmp/apkpub/release/SocialVideoDownloader-v${VERSION}-release-unsigned.apk"
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          cp "$BT/lib/apksigner.jar" "$BT/zipalign" /tmp/apkpub/release/tools/
+          [ -d "$BT/lib64" ] && cp -r "$BT/lib64" /tmp/apkpub/release/tools/ || true
+          basename "$BT" > /tmp/apkpub/release/tools/BUILD_TOOLS_VERSION
           mkdir -p /tmp/apkpub/screenshots && find screenshots -name '*.png' -exec cp {} /tmp/apkpub/screenshots/ \; 2>/dev/null || true
           printf '# Latest tested APK\n\nBuilt from %s.\n\nDownload: [%s](https://github.com/%s/raw/apk-builds/%s)\n' "$GITHUB_SHA" "$OUT" "$GITHUB_REPOSITORY" "$OUT" > /tmp/apkpub/README.md
           cd /tmp/apkpub
